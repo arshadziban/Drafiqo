@@ -20,6 +20,7 @@ import {
 } from "../editor/actions";
 import { openExportDialog } from "../components/openExportDialog";
 import { placeImageFiles, placeImageFromPicker } from "../editor/images";
+import { startPresenting } from "../editor/present";
 import { currentPage, useEditor, type Tool } from "../editor/store";
 import { newProject, openProject, saveProject, saveProjectAs } from "../storage/fileActions";
 
@@ -90,6 +91,10 @@ function handle(e: KeyboardEvent): boolean {
       case "k":
         if (!e.shiftKey) return false;
         void placeImageFromPicker();
+        return true;
+      case "Enter":
+        if (!e.altKey) return false;
+        startPresenting("selection");
         return true;
       case "]":
         reorderSelection("forward");
@@ -196,7 +201,7 @@ function handle(e: KeyboardEvent): boolean {
 
 /** Ctrl+V: a picture on the system clipboard is placed; otherwise the copied layers are pasted. */
 function onPaste(e: ClipboardEvent): void {
-  if (useCanvasUi.getState().exportOpen || isTyping(e.target)) return;
+  if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().presenting || isTyping(e.target)) return;
   const pictures = [...(e.clipboardData?.files ?? [])].filter((file) => file.type.startsWith("image/"));
   e.preventDefault();
   if (pictures.length > 0) void placeImageFiles(pictures);
@@ -205,8 +210,8 @@ function onPaste(e: ClipboardEvent): void {
 
 export function installShortcuts(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
-    // The export dialog is modal: editor shortcuts wait until it closes.
-    if (useCanvasUi.getState().exportOpen) return;
+    // The export dialog and the slideshow are modal: editor shortcuts wait until they close.
+    if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().presenting) return;
     // Typing in a field keeps every key, including the system's own editing shortcuts.
     if (isTyping(e.target)) {
       const fileShortcut = (e.metaKey || e.ctrlKey) && ["s", "o", "n"].includes(e.key.toLowerCase());

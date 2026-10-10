@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Canvas } from "../canvas/Canvas";
 import { ExportDialog } from "../components/ExportDialog";
 import { LeftSidebar } from "../components/LeftSidebar";
+import { Presentation } from "../components/Presentation";
 import { PropertiesPanel } from "../components/PropertiesPanel";
 import { ToolDock } from "../components/ToolDock";
 import { Toast } from "../components/Toast";
@@ -56,6 +57,7 @@ export function App() {
       </div>
       <ExportDialog />
       <TooltipLayer />
+      <Presentation />
       <Toast />
     </div>
   );

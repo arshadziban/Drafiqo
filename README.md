@@ -52,6 +52,10 @@ An image is a rectangle with an image fill, so it moves, resizes, rotates, takes
 
 PNG, JPG, WebP, GIF, SVG, AVIF and BMP are supported, up to 25 MB each; pictures larger than 4096 px on a side are scaled down. Pictures are embedded in the `.drafiqo` file, once each however often they are used, and ones nothing uses any more are dropped when saving. A vector PDF cannot carry pictures (it says so); use its Image mode.
 
+## Presenting
+
+**Present** (the play button in the top bar, or Ctrl+Alt+Enter) shows the page as a slideshow. Each top-level frame is a slide, in reading order (rows from top to bottom, left to right); a page without frames is one slide. It opens in a separate window (a pop-up window in a browser) that you can move, resize and close like any other, and press F for full screen; the editor stays as it was and keeps working; if no window can be opened it covers the editor instead. It starts from the selected frame, or from the first slide; the arrow next to the button also offers **Present from start**. Arrow keys, Space, Page Up/Down or clicks (Shift+click goes back) move between slides, Home and End jump to the ends, and Esc closes the window. The slideshow is live: edits made in the editor appear in the window a moment later, on the slide you are viewing.
+
 ## Project files
 
 A `.drafiqo` file is JSON holding the full editable document: pages, the layer tree, and every object's geometry, style and text. It carries a `schemaVersion`; older versions are upgraded through `document/migrate.ts`, and files from a newer version are refused rather than misread.

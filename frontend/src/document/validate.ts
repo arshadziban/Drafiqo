@@ -75,6 +75,7 @@ function checkEffects(r: Reporter, value: unknown, path: string) {
 }
 
 const nonNegative = (v: unknown) => isNum(v) && v >= 0;
+const isRadii = (v: unknown) => Array.isArray(v) && v.length === 4 && v.every(nonNegative);
 const isCap = oneOf(["butt", "round", "square"]);
 
 function checkNode(r: Reporter, node: Obj, path: string) {
@@ -92,10 +93,10 @@ function checkNode(r: Reporter, node: Obj, path: string) {
   switch (node.type as NodeType) {
     case "frame":
       r.check(node, path, "clipContent", isBool, "a boolean");
-      r.check(node, path, "cornerRadius", nonNegative, "a non-negative number");
+      r.check(node, path, "cornerRadii", isRadii, "four non-negative numbers");
       break;
     case "rectangle":
-      r.check(node, path, "cornerRadius", nonNegative, "a non-negative number");
+      r.check(node, path, "cornerRadii", isRadii, "four non-negative numbers");
       break;
     case "line":
       r.check(node, path, "strokeCap", isCap, "a stroke cap");

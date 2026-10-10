@@ -4,7 +4,7 @@ import { layoutText } from "../document/textLayout";
 import { activeLayerBlur, filterPad } from "../document/effects";
 import type { Effect, ImagePaint, ImageScaleMode, NodeId, SceneNode, ShadowEffect, SolidPaint, TextNode } from "../document/types";
 import { getAsset } from "../document/assets";
-import { polygonPoints, starPoints, vectorPath } from "./shapes";
+import { cornerRadiiOf, outlinePath, polygonPoints, starPoints, vectorPath } from "./shapes";
 
 type ShapeProps = SVGProps<SVGElement>;
 
@@ -18,8 +18,9 @@ function shape(node: SceneNode, { key, ...p }: Record<string, unknown> & { key?:
   switch (node.type) {
     case "frame":
     case "rectangle": {
-      const r = Math.min(node.cornerRadius, node.width / 2, node.height / 2);
-      return <rect key={key} width={node.width} height={node.height} rx={r} {...p} />;
+      const [tl, tr, br, bl] = cornerRadiiOf(node);
+      if (tl === tr && tr === br && br === bl) return <rect key={key} width={node.width} height={node.height} rx={tl} {...p} />;
+      return <path key={key} d={outlinePath(node)} {...p} />;
     }
     case "section":
       return <rect key={key} width={node.width} height={node.height} rx={2} {...p} />;

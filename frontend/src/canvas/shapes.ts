@@ -1,4 +1,4 @@
-import type { PathPoint, PolygonNode, SceneNode, StarNode } from "../document/types";
+import type { CornerRadii, PathPoint, PolygonNode, SceneNode, StarNode } from "../document/types";
 
 const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
 
@@ -46,6 +46,17 @@ export function vectorPath(points: readonly PathPoint[], closed: boolean): strin
 const K = 0.5522847498; // control-point offset that makes a cubic Bézier approximate a quarter circle
 
 /**
+ * A frame's or rectangle's corner radii, scaled down together when neighbouring corners
+ * would overlap along a side (the same rule as CSS border-radius).
+ */
+export function cornerRadiiOf(node: { width: number; height: number; cornerRadii: CornerRadii }): CornerRadii {
+  const [tl, tr, br, bl] = node.cornerRadii;
+  const fit = (side: number, sum: number) => (sum > side ? side / sum : 1);
+  const f = Math.min(fit(node.width, tl + tr), fit(node.width, bl + br), fit(node.height, tl + bl), fit(node.height, tr + br));
+  return [tl * f, tr * f, br * f, bl * f];
+}
+
+/**
  * A node's outline as path data using only absolute M, L, C and Z commands,
  * for writers (such as PDF) that have no shape primitives.
  */
@@ -55,15 +66,14 @@ export function outlinePath(node: SceneNode): string {
     case "frame":
     case "rectangle":
     case "section": {
-      const r = node.type === "section" ? 2 : Math.min(node.cornerRadius, w / 2, h / 2);
-      if (r <= 0) return `M0 0 L${fmt(w)} 0 L${fmt(w)} ${fmt(h)} L0 ${fmt(h)} Z`;
-      const k = r * (1 - K);
+      const [tl, tr, br, bl] = node.type === "section" ? [2, 2, 2, 2] : cornerRadiiOf(node);
+      const c = (r: number) => r * (1 - K);
       return [
-        `M${fmt(r)} 0`,
-        `L${fmt(w - r)} 0 C${fmt(w - k)} 0 ${fmt(w)} ${fmt(k)} ${fmt(w)} ${fmt(r)}`,
-        `L${fmt(w)} ${fmt(h - r)} C${fmt(w)} ${fmt(h - k)} ${fmt(w - k)} ${fmt(h)} ${fmt(w - r)} ${fmt(h)}`,
-        `L${fmt(r)} ${fmt(h)} C${fmt(k)} ${fmt(h)} 0 ${fmt(h - k)} 0 ${fmt(h - r)}`,
-        `L0 ${fmt(r)} C0 ${fmt(k)} ${fmt(k)} 0 ${fmt(r)} 0 Z`,
+        `M${fmt(tl)} 0`,
+        `L${fmt(w - tr)} 0 C${fmt(w - c(tr))} 0 ${fmt(w)} ${fmt(c(tr))} ${fmt(w)} ${fmt(tr)}`,
+        `L${fmt(w)} ${fmt(h - br)} C${fmt(w)} ${fmt(h - c(br))} ${fmt(w - c(br))} ${fmt(h)} ${fmt(w - br)} ${fmt(h)}`,
+        `L${fmt(bl)} ${fmt(h)} C${fmt(c(bl))} ${fmt(h)} 0 ${fmt(h - c(bl))} 0 ${fmt(h - bl)}`,
+        `L0 ${fmt(tl)} C0 ${fmt(c(tl))} ${fmt(c(tl))} 0 ${fmt(tl)} 0 Z`,
       ].join(" ");
     }
     case "ellipse": {

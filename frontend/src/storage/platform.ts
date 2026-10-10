@@ -41,6 +41,12 @@ export interface StoragePlatform {
   minimizeWindow(): void;
   toggleMaximizeWindow(): void;
   closeWindow(): void;
+  /**
+   * Opens the slideshow in a separate window at the given app path (a pop-up window in a browser).
+   * Must be called straight from the click or key press that asked for it. Resolves false if
+   * no window could be opened.
+   */
+  openPresentation(path: string): Promise<boolean>;
   /** Calls `handler` before the window closes; return false to keep it open. */
   onCloseRequested(handler: () => Promise<boolean>): void;
 }
@@ -124,6 +130,23 @@ function desktopPlatform(): StoragePlatform {
     closeWindow() {
       void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().close());
     },
+    async openPresentation(path) {
+      try {
+        const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+        const view = new WebviewWindow(`present-${Date.now()}`, { url: path, title: "Presentation", width: 1100, height: 700, minWidth: 480, minHeight: 320, center: true, resizable: true, decorations: true, focus: true });
+        return await new Promise<boolean>((resolve) => {
+          const timeout = window.setTimeout(() => resolve(false), 8000);
+          const done = (opened: boolean) => {
+            window.clearTimeout(timeout);
+            resolve(opened);
+          };
+          void view.once("tauri://created", () => done(true));
+          void view.once("tauri://error", () => done(false));
+        });
+      } catch {
+        return false;
+      }
+    },
     onCloseRequested(handler) {
       void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested(async (event) => {
@@ -192,7 +215,15 @@ function browserPlatform(): StoragePlatform {
     },
     minimizeWindow() {},
     toggleMaximizeWindow() {},
-    closeWindow() {},
+    // Only a window that a script opened (such as the slideshow tab) is allowed to close itself.
+    closeWindow() {
+      window.close();
+    },
+    async openPresentation(path) {
+      // Asking for a pop-up with a size makes the browser open a separate window, not a tab.
+      const features = `popup=yes,left=80,top=60,width=1100,height=700`;
+      return window.open(path, "_blank", features) !== null;
+    },
     onCloseRequested() {
       window.addEventListener("beforeunload", (event) => {
         // The browser shows its own generic prompt; the handler result cannot be awaited here.

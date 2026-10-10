@@ -7,6 +7,27 @@ type RawDocument = Record<string, unknown>;
  * document one version newer. Add an entry whenever SCHEMA_VERSION is bumped.
  */
 const MIGRATIONS: Record<number, (doc: RawDocument) => RawDocument> = {
+  // v4: corners have a radius each; every v3 frame and rectangle had one radius for all four.
+  3: (doc) => {
+    const pages = Array.isArray(doc.pages) ? doc.pages : [];
+    return {
+      ...doc,
+      pages: pages.map((page: unknown) => {
+        if (typeof page !== "object" || page === null) return page;
+        const nodes = (page as { nodes?: unknown }).nodes;
+        if (typeof nodes !== "object" || nodes === null) return page;
+        const upgraded = Object.fromEntries(
+          Object.entries(nodes).map(([id, node]) => {
+            if (typeof node !== "object" || node === null || !("cornerRadius" in node)) return [id, node];
+            const { cornerRadius, ...rest } = node as { cornerRadius: unknown };
+            const r = typeof cornerRadius === "number" ? cornerRadius : 0;
+            return [id, { ...rest, cornerRadii: [r, r, r, r] }];
+          }),
+        );
+        return { ...(page as object), nodes: upgraded };
+      }),
+    };
+  },
   // v3: documents can carry images; every v2 document has none.
   2: (doc) => ({ ...doc, assets: {} }),
   // v2: shadows gained `spread`; every v1 effect is a drop shadow, which had none.

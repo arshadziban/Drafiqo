@@ -92,7 +92,7 @@ describe("export validation", () => {
 function scene() {
   let page: Page = createPage("Test");
   const frame = { ...createFrame({ x: 100, y: 50, width: 375, height: 812 }), name: "Home" };
-  const card = { ...createRectangle({ x: 20, y: 30, width: 200, height: 100 }), cornerRadius: 12, fills: [solidPaint("#ff0000", 0.5)] };
+  const card = { ...createRectangle({ x: 20, y: 30, width: 200, height: 100 }), cornerRadii: [12, 12, 12, 12] as [number, number, number, number], fills: [solidPaint("#ff0000", 0.5)] };
   const title = createText({ x: 20, y: 150, width: 10, height: 10 }, "Hello & <world>");
   const loose = { ...createEllipse({ x: 600, y: 60, width: 80, height: 40 }), strokes: [solidPaint("#0000ff")], strokeWidth: 4 };
   page = insertNode(page, frame);

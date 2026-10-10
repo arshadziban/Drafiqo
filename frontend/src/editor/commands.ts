@@ -42,7 +42,7 @@ type Nodes = Record<NodeId, SceneNode>;
 
 /** Editable properties. Size goes through `resizeNode`; structure through the tree commands. */
 export type NodePatch = Partial<Omit<BaseNode, "id" | "parentId" | "width" | "height">> &
-  Partial<Pick<FrameNode, "clipContent" | "cornerRadius">> &
+  Partial<Pick<FrameNode, "clipContent" | "cornerRadii">> &
   Partial<Pick<LineNode, "strokeCap">> &
   Partial<Pick<PolygonNode, "sides">> &
   Partial<Pick<StarNode, "pointCount" | "innerRatio">> &

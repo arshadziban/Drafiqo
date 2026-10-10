@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Minus,
+  Play,
   Plus,
   Redo2,
   Square,
@@ -28,7 +29,8 @@ import {
   zoomToFit,
 } from "../editor/actions";
 import { placeImageFromPicker } from "../editor/images";
-import { currentViewport, isDirty, useEditor } from "../editor/store";
+import { presentationSlides, slideOfSelection, startPresenting } from "../editor/present";
+import { currentPage, currentViewport, isDirty, useEditor } from "../editor/store";
 import { IconSidebarRight } from "../icons/icons";
 import { newProject, openProject, openRecentProject, renameProject, saveProject, saveProjectAs } from "../storage/fileActions";
 import { platform } from "../storage/platform";
@@ -38,7 +40,7 @@ import { IconButton, MenuList, useDismiss, type MenuEntry } from "./ui";
 
 const Divider = () => <div className="mx-1.5 h-4 w-px shrink-0 bg-ink-700" />;
 
-function Menu({ label, items, align = "left" }: { label: React.ReactNode; items: () => MenuEntry[]; align?: "left" | "right" }) {
+function Menu({ label, items, align = "left", ariaLabel }: { label: React.ReactNode; items: () => MenuEntry[]; align?: "left" | "right"; ariaLabel?: string }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useDismiss(open, close);
@@ -46,6 +48,7 @@ function Menu({ label, items, align = "left" }: { label: React.ReactNode; items:
     <div ref={ref} className="relative">
       <button
         type="button"
+        aria-label={ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -296,6 +299,26 @@ export function Toolbar() {
           <IconButton label="Zoom in" shortcut="Mod++" onClick={zoomIn}>
             <Plus size={14} strokeWidth={1.75} />
           </IconButton>
+        </div>
+        <Divider />
+        <div className="flex items-center rounded-lg bg-ink-850 p-0.5 ring-1 ring-white/5">
+          <IconButton label="Present" shortcut="Mod+Alt+Enter" onClick={() => startPresenting("selection")}>
+            <Play size={14} strokeWidth={1.75} />
+          </IconButton>
+          <Menu
+            align="right"
+            ariaLabel="Presentation options"
+            label={<ChevronDown size={11} className="text-ink-400" />}
+            items={() => {
+              const s = useEditor.getState();
+              const page = currentPage(s);
+              const onFrame = slideOfSelection(page, presentationSlides(page), s.selection) !== null;
+              return [
+                { label: "Present from selected frame", shortcut: "Mod+Alt+Enter", disabled: !onFrame, action: () => startPresenting("selection") },
+                { label: "Present from start", action: () => startPresenting("start") },
+              ];
+            }}
+          />
         </div>
       </div>
       {platform.kind === "desktop" && <WindowControls />}

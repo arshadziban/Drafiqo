@@ -1,7 +1,7 @@
 // The Drafiqo document model. Plain JSON-serializable data, independent of
 // React and of how the canvas is rendered.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const FILE_FORMAT = "drafiqo";
 
 export type NodeId = string;
@@ -92,11 +92,14 @@ export interface BaseNode {
   effects: Effect[];
 }
 
+/** Corner radii in the order top-left, top-right, bottom-right, bottom-left. */
+export type CornerRadii = [number, number, number, number];
+
 export interface FrameNode extends BaseNode {
   type: "frame";
   children: NodeId[];
   clipContent: boolean;
-  cornerRadius: number;
+  cornerRadii: CornerRadii;
 }
 
 export interface SectionNode extends BaseNode {
@@ -111,7 +114,7 @@ export interface GroupNode extends BaseNode {
 
 export interface RectangleNode extends BaseNode {
   type: "rectangle";
-  cornerRadius: number;
+  cornerRadii: CornerRadii;
 }
 
 export interface EllipseNode extends BaseNode {

@@ -114,7 +114,7 @@ export function createFrame(box: Box): FrameNode {
     fills: [solidPaint("#ffffff")],
     children: [],
     clipContent: true,
-    cornerRadius: 0,
+    cornerRadii: [0, 0, 0, 0],
   };
 }
 
@@ -133,7 +133,7 @@ export function createGroup(box: Box): GroupNode {
 }
 
 export function createRectangle(box: Box): RectangleNode {
-  return { ...base("rectangle", box), type: "rectangle", fills: [solidPaint(SHAPE_FILL)], cornerRadius: 0 };
+  return { ...base("rectangle", box), type: "rectangle", fills: [solidPaint(SHAPE_FILL)], cornerRadii: [0, 0, 0, 0] };
 }
 
 export function createEllipse(box: Box): EllipseNode {

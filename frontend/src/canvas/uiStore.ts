@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SlideView } from "../editor/present";
 import type { Rect } from "../document/geometry";
 import type { NodeId, PathPoint } from "../document/types";
 import type { SnapGuide } from "./snapping";
@@ -18,6 +19,8 @@ interface CanvasUiState {
   /** The frame or section whose name is being edited on the canvas label. */
   labelEditId: NodeId | null;
   exportOpen: boolean;
+  /** The slideshow, while one is running. */
+  presenting: { slides: SlideView[]; index: number } | null;
   /** A short confirmation shown at the top of the window, e.g. after an export. */
   toast: { id: number; title: string; detail?: string; warnings?: string[] } | null;
 }
@@ -31,5 +34,6 @@ export const useCanvasUi = create<CanvasUiState>()(() => ({
   renamingId: null,
   labelEditId: null,
   exportOpen: false,
+  presenting: null,
   toast: null,
 }));

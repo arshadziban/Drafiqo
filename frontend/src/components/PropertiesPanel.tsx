@@ -16,6 +16,7 @@ import {
   Plus,
   RotateCw,
   Scan,
+  Expand,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { fontStack } from "../canvas/renderNode";
@@ -23,7 +24,7 @@ import { convertEffect } from "../document/effects";
 import { dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
 import { getPage } from "../document/tree";
 import { getAsset } from "../document/assets";
-import type { Effect, EffectType, ImagePaint, ImageScaleMode, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, SolidPaint, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
+import type { CornerRadii, Effect, EffectType, ImagePaint, ImageScaleMode, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, SolidPaint, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
 import { FRAME_PRESETS, alignSelection, distributeSelection, insertFramePreset } from "../editor/actions";
 import { patchNodes, resizeNode, type NodePatch } from "../editor/commands";
 import { chooseImageForFill } from "../editor/images";
@@ -84,6 +85,20 @@ function AlignRow({ count }: { count: number }) {
   );
 }
 
+const CORNERS = [
+  { index: 0, label: "TL" },
+  { index: 1, label: "TR" },
+  { index: 3, label: "BL" },
+  { index: 2, label: "BR" },
+];
+const CORNER_NAMES = ["Top-left", "Top-right", "Bottom-right", "Bottom-left"];
+
+/** A frame's or rectangle's four corner radii. */
+const radii = (node: SceneNode): CornerRadii => (prop(node, "cornerRadii") as CornerRadii | undefined) ?? [0, 0, 0, 0];
+
+/** The one radius all corners of all selected layers share, or "mixed". */
+const mixedRadius = (nodes: SceneNode[]): number | Mixed => shared(nodes.flatMap((n) => radii(n)), (r) => r);
+
 function Geometry({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
   const resize = (width: number | null, height: number | null) =>
     useEditor.getState().edit((page) =>
@@ -92,6 +107,7 @@ function Geometry({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
         return n ? resizeNode(p, id, width ?? n.width, height ?? n.height) : p;
       }, page),
     );
+  const [perCorner, setPerCorner] = useState(false);
   const hasRadius = nodes.every((n) => n.type === "rectangle" || n.type === "frame");
   const onlyLines = nodes.every((n) => n.type === "line");
   return (
@@ -112,8 +128,32 @@ function Geometry({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
           onChange={(o) => edit(ids, { opacity: o / 100 })}
         />
         {hasRadius && (
-          <NumberField label={<Scan size={11} />} title="Corner radius" min={0} value={sharedProp<number>(nodes, "cornerRadius")} onChange={(cornerRadius) => edit(ids, { cornerRadius })} />
+          <div className="flex items-center gap-1">
+            <div className="min-w-0 flex-1">
+              <NumberField
+                label={<Scan size={11} />}
+                title="Corner radius"
+                min={0}
+                value={mixedRadius(nodes)}
+                onChange={(r) => edit(ids, { cornerRadii: [r, r, r, r] })}
+              />
+            </div>
+            <IconButton label="Independent corners" active={perCorner} onClick={() => setPerCorner(!perCorner)}>
+              <Expand size={14} />
+            </IconButton>
+          </div>
         )}
+        {hasRadius && perCorner &&
+          CORNERS.map(({ index, label }) => (
+            <NumberField
+              key={index}
+              label={<span className="text-[9px] font-medium">{label}</span>}
+              title={`${CORNER_NAMES[index]} corner radius`}
+              min={0}
+              value={shared(nodes, (n) => radii(n)[index] ?? 0)}
+              onChange={(r) => edit(ids, (n) => ({ cornerRadii: radii(n).map((v, i) => (i === index ? r : v)) as CornerRadii }))}
+            />
+          ))}
       </div>
     </Section>
   );
@@ -516,7 +556,6 @@ export function PropertiesPanel() {
             >
               Export {nodes.length === 1 ? nodes[0]!.name : `${nodes.length} layers`}…
             </button>
-            <p className="text-ink-400">PNG, JPG and WebP at 1×–4× or a custom size, plus SVG and PDF.</p>
           </Section>
         </>
       )}

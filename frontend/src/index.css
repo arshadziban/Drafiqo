@@ -20,6 +20,12 @@
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --shadow-popover: 0 0 0 1px rgb(255 255 255 / 0.06), 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.35);
   --animate-pop: pop 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade: fade 160ms ease-out;
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
   @keyframes pop {
     from {
       opacity: 0;
