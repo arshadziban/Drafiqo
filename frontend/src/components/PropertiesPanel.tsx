@@ -18,6 +18,7 @@ import {
   Scan,
 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { fontStack } from "../canvas/renderNode";
 import { convertEffect } from "../document/effects";
 import { dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
 import { getPage } from "../document/tree";
@@ -180,7 +181,7 @@ function TextSection({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
       <Select
         label="Font family"
         value={sharedProp<string>(nodes, "fontFamily")}
-        options={FONT_FAMILIES.map((f) => ({ value: f, label: f }))}
+        options={FONT_FAMILIES.map((f) => ({ value: f, label: f, fontFamily: fontStack(f) }))}
         onChange={(fontFamily) => edit(ids, { fontFamily })}
       />
       <div className="grid grid-cols-2 gap-2">
@@ -240,7 +241,7 @@ function PaintList({
     <Section
       title={title}
       action={
-        <button type="button" aria-label={`Add ${title.toLowerCase()}`} title={`Add ${title.toLowerCase()}`} onClick={() => onChange([...list, solidPaint(defaultColor)])} className="-mr-1 flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+        <button type="button" aria-label={`Add ${title.toLowerCase()}`} data-tip={`Add ${title.toLowerCase()}`} onClick={() => onChange([...list, solidPaint(defaultColor)])} className="-mr-1 flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
           <Plus size={14} strokeWidth={1.75} />
         </button>
       }
@@ -275,7 +276,7 @@ function AddEffectMenu({ onAdd, hasBlur }: { onAdd: (effect: Effect) => void; ha
   const ref = useDismiss(open, close);
   return (
     <div ref={ref} className="relative -mr-1">
-      <button type="button" aria-label="Add effect" title="Add effect" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+      <button type="button" aria-label="Add effect" data-tip="Add effect" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
         <Plus size={14} strokeWidth={1.75} />
       </button>
       {open && (

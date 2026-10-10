@@ -83,6 +83,7 @@ function Handles({ page, id, view }: { page: Page; id: NodeId; view: Matrix }) {
 }
 
 function FrameLabels({ page, view, selection }: { page: Page; view: Matrix; selection: NodeId[] }) {
+  const editing = useCanvasUi((s) => s.labelEditId);
   return (
     <>
       {page.children.map((id) => {
@@ -99,6 +100,8 @@ function FrameLabels({ page, view, selection }: { page: Page; view: Matrix; sele
             y={-7}
             fontSize={11}
             fill={selection.includes(id) ? ACCENT : "#a3aaba"}
+            // The editor input replaces the text while the name is being edited.
+            visibility={editing === id ? "hidden" : undefined}
             style={{ cursor: "var(--cursor-app)" }}
           >
             {node.name}

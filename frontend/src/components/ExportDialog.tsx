@@ -319,7 +319,7 @@ function Dialog({ onClose }: { onClose: () => void }) {
                     <button
                       type="button"
                       aria-label="Lock aspect ratio"
-                      title={size.lockAspect ? "Aspect ratio locked" : "Aspect ratio unlocked"}
+                      data-tip={size.lockAspect ? "Aspect ratio locked" : "Aspect ratio unlocked"}
                       aria-pressed={size.lockAspect}
                       onClick={() => updateSize(setAspectLock(size, source, !size.lockAspect))}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-100 ${
@@ -409,7 +409,7 @@ function Dialog({ onClose }: { onClose: () => void }) {
               </div>
               {platform.canChooseFolder ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="flex h-7 min-w-0 flex-1 items-center truncate rounded-md bg-ink-800 px-2 text-ink-300" title={folder ?? undefined}>
+                  <span className="flex h-7 min-w-0 flex-1 items-center truncate rounded-md bg-ink-800 px-2 text-ink-300" data-tip={folder ?? undefined}>
                     {folder ?? "No folder chosen"}
                   </span>
                   <button type="button" onClick={() => void pickFolder()} className="flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-ink-700 px-2.5 font-medium text-ink-100 hover:bg-ink-600">

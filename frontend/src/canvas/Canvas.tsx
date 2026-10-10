@@ -3,6 +3,7 @@ import { zoomAt } from "../editor/actions";
 import { currentPage, currentViewport, useEditor } from "../editor/store";
 import { ContextMenu } from "./ContextMenu";
 import { finishPen, isSpaceHeld, onContextMenu, onDoubleClick, onPointerDown, onPointerMove, onPointerUp, setSpaceHeld } from "./interactions";
+import { LabelEditor } from "./LabelEditor";
 import { NodeView } from "./NodeView";
 import { Overlay } from "./Overlay";
 import { TextEditor } from "./TextEditor";
@@ -150,6 +151,7 @@ export function Canvas() {
       </svg>
       {children.length === 0 && tool === "select" && <EmptyHint />}
       <TextEditor />
+      <LabelEditor />
       <ContextMenu />
     </div>
   );

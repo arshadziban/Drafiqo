@@ -154,7 +154,8 @@ test("creates and edits text", async ({ page }) => {
 
   await setField(page, "Font size", "32");
   await expect(nodes(page, "text").locator("text")).toHaveAttribute("font-size", "32");
-  await field(page, "Font weight").selectOption("700");
+  await field(page, "Font weight").click();
+  await page.getByRole("option", { name: "Bold", exact: true }).click();
   await expect(nodes(page, "text").locator("text")).toHaveAttribute("font-weight", "700");
 
   // The whole editing session is one undo step; creation is another.
@@ -203,7 +204,7 @@ test("saves a .drafiqo project and reopens it with everything still editable", a
   const path = await download.path();
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved.format).toBe("drafiqo");
-  expect(saved.schemaVersion).toBe(1);
+  expect(saved.schemaVersion).toBe(2);
   expect(Object.keys(saved.pages[0].nodes)).toHaveLength(3);
 
   // Start over, then open the file that was just written.
@@ -247,6 +248,41 @@ test("refuses a damaged project file and keeps the current document", async ({ p
   await (await chooserPromise).setFiles({ name: "broken.drafiqo", mimeType: "application/json", buffer: Buffer.from('{"format":"drafiqo","schemaVersion":1,"pages":[]}') });
   await expect.poll(() => messages.join("\n")).toContain("at least one page");
   await expect(nodes(page, "rectangle")).toHaveCount(1);
+});
+
+test("renames a frame by double-clicking its name on the canvas", async ({ page }) => {
+  await draw(page, "f", [400, 250], [700, 450]);
+  const label = page.locator("[data-label-id]").first();
+  const editor = page.getByLabel("Frame name");
+  await expect(label).toHaveText("Frame 1");
+
+  await label.dblclick();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue("Frame 1");
+  // Typing letters edits the name; it does not switch tools.
+  await page.keyboard.type("Hero rofl");
+  await page.keyboard.press("Enter");
+  await expect(editor).toHaveCount(0);
+  await expect(label).toHaveText("Hero rofl");
+  await expect(layers(page)).toHaveText(["Hero rofl"]);
+
+  // Escape and an empty name both keep the current name.
+  await label.dblclick();
+  await page.keyboard.type("Discarded");
+  await page.keyboard.press("Escape");
+  await expect(label).toHaveText("Hero rofl");
+  await label.dblclick();
+  await page.keyboard.press("Delete");
+  await page.keyboard.press("Enter");
+  await expect(label).toHaveText("Hero rofl");
+
+  // Clicking away keeps what was typed, and the rename is one undo step.
+  await label.dblclick();
+  await page.keyboard.type("Landing");
+  await page.mouse.click(1000, 700);
+  await expect(label).toHaveText("Landing");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(label).toHaveText("Hero rofl");
 });
 
 test("renames the project by clicking its name", async ({ page }) => {

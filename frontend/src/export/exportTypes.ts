@@ -3,7 +3,6 @@ import type { NodeId } from "../document/types";
 export type RasterFormat = "png" | "jpg" | "webp";
 export type ExportFormat = RasterFormat | "svg" | "pdf";
 
-export const RASTER_FORMATS: readonly RasterFormat[] = ["png", "jpg", "webp"];
 export const SCALE_PRESETS = [1, 2, 3, 4] as const;
 export type ScalePreset = (typeof SCALE_PRESETS)[number];
 export type ScaleMode = ScalePreset | "custom";

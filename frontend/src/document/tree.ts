@@ -1,4 +1,4 @@
-import { isContainer, type ContainerNode, type DrafiqoDocument, type NodeId, type Page, type PageId, type SceneNode } from "./types";
+import { isContainer, type DrafiqoDocument, type NodeId, type Page, type PageId, type SceneNode } from "./types";
 
 export function getPage(doc: DrafiqoDocument, pageId: PageId): Page | undefined {
   return doc.pages.find((p) => p.id === pageId);
@@ -8,11 +8,6 @@ export function childrenOf(page: Page, parentId: NodeId | null): readonly NodeId
   if (parentId === null) return page.children;
   const parent = page.nodes[parentId];
   return parent && isContainer(parent) ? parent.children : [];
-}
-
-export function getContainer(page: Page, id: NodeId | null): ContainerNode | undefined {
-  const node = id ? page.nodes[id] : undefined;
-  return node && isContainer(node) ? node : undefined;
 }
 
 /** Ancestor ids from the direct parent up to the top-level node. */

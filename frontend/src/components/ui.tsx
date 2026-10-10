@@ -80,35 +80,9 @@ export function useDismiss(open: boolean, onClose: () => void) {
   return ref;
 }
 
-/** Tooltip shown beside a toolbar control after a short hover. */
-export function Tooltip({
-  text,
-  shortcut,
-  align = "center",
-  side = "below",
-}: {
-  text: string;
-  shortcut?: string;
-  align?: "center" | "right";
-  side?: "above" | "below";
-}) {
-  return (
-    <span
-      aria-hidden
-      className={`pointer-events-none absolute z-50 ${side === "above" ? "bottom-full mb-2.5" : "top-full mt-2"} flex items-center gap-2 rounded-md bg-ink-100 px-2 py-1 text-[11px] font-medium whitespace-nowrap text-ink-950 opacity-0 shadow-lg transition-opacity delay-0 duration-100 group-hover/tip:opacity-100 group-hover/tip:delay-500 ${
-        align === "right" ? "right-0" : "left-1/2 -translate-x-1/2"
-      }`}
-    >
-      {text}
-      {shortcut && <span className="text-ink-400">{formatShortcut(shortcut)}</span>}
-    </span>
-  );
-}
-
 export function IconButton({
   label,
   shortcut,
-  tooltip,
   active,
   disabled,
   onClick,
@@ -116,8 +90,6 @@ export function IconButton({
 }: {
   label: string;
   shortcut?: string;
-  /** Show a styled tooltip instead of the system one (only where nothing clips it). */
-  tooltip?: boolean;
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -127,17 +99,17 @@ export function IconButton({
   return (
     <button
       type="button"
-      title={tooltip ? undefined : name}
+      data-tip={label}
+      data-tip-shortcut={shortcut}
       aria-label={name}
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={`group/tip relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-100 disabled:text-ink-600 ${
+      className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors duration-100 disabled:text-ink-600 ${
         active ? "bg-accent text-white shadow-sm shadow-black/40" : "text-ink-300 enabled:hover:bg-ink-700 enabled:hover:text-ink-100 enabled:active:bg-ink-600"
       }`}
     >
       {children}
-      {tooltip && <Tooltip text={label} shortcut={shortcut} />}
     </button>
   );
 }
@@ -182,7 +154,7 @@ export function NumberField({
   };
 
   return (
-    <label title={title} className="flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 border border-transparent bg-ink-800 transition-colors duration-100 hover:border-ink-600 focus-within:border-accent focus-within:bg-ink-950">
+    <label data-tip={title} className="flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2 border border-transparent bg-ink-800 transition-colors duration-100 hover:border-ink-600 focus-within:border-accent focus-within:bg-ink-950">
       {label !== "" && <span className="flex min-w-3 shrink-0 items-center justify-center text-ink-400">{label}</span>}
       <input
         aria-label={title}
@@ -271,34 +243,4 @@ export function Section({ title, action, children }: { title: string; action?: R
   );
 }
 
-export function Select<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T | Mixed;
-  options: readonly { value: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <select
-      aria-label={label}
-      title={label}
-      className="h-7 w-full min-w-0 rounded-md border border-transparent bg-ink-800 pl-2 text-ink-100 transition-colors duration-100 outline-none hover:border-ink-600 focus:border-accent"
-      value={value === "mixed" ? "" : String(value)}
-      onChange={(e) => {
-        const option = options.find((o) => String(o.value) === e.target.value);
-        if (option) onChange(option.value);
-      }}
-    >
-      {value === "mixed" && <option value="">Mixed</option>}
-      {options.map((o) => (
-        <option key={String(o.value)} value={String(o.value)}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
+export { Select, type SelectOption } from "./Select";

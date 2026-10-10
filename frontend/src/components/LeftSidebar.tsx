@@ -1,44 +1,34 @@
 import {
   ChevronDown,
   ChevronRight,
-  Circle,
   Eye,
   EyeOff,
-  Frame,
   Group,
-  LayoutPanelTop,
   Lock,
-  Minus,
-  PanelLeftClose,
-  PenTool,
   Plus,
-  Square,
-  Star,
   Trash2,
-  Triangle,
-  Type,
   Unlock,
-  type LucideIcon,
 } from "lucide-react";
-import { memo, useState, type DragEvent } from "react";
+import { memo, useState, type ComponentType, type DragEvent } from "react";
 import { useCanvasUi } from "../canvas/uiStore";
 import { childrenOf, isEffectivelyLocked, paintOrder } from "../document/tree";
 import { isContainer, type NodeId, type NodeType, type Page } from "../document/types";
 import { createPageAction, deletePageAction } from "../editor/actions";
 import { moveNodesInTree, movePage, patchNodes } from "../editor/commands";
 import { currentPage, useEditor } from "../editor/store";
+import { IconEllipse, IconFrame, IconLine, IconPen, IconPolygon, IconRectangle, IconSection, IconSidebarLeft, IconStar, IconText, type IconProps } from "../icons/icons";
 
-const TYPE_ICONS: Record<NodeType, LucideIcon> = {
-  frame: Frame,
-  section: LayoutPanelTop,
+const TYPE_ICONS: Record<NodeType, ComponentType<IconProps>> = {
+  frame: IconFrame,
+  section: IconSection,
   group: Group,
-  rectangle: Square,
-  ellipse: Circle,
-  line: Minus,
-  polygon: Triangle,
-  star: Star,
-  text: Type,
-  vector: PenTool,
+  rectangle: IconRectangle,
+  ellipse: IconEllipse,
+  line: IconLine,
+  polygon: IconPolygon,
+  star: IconStar,
+  text: IconText,
+  vector: IconPen,
 };
 
 function RenameInput({ initial, onDone, label }: { initial: string; onDone: (name: string | null) => void; label: string }) {
@@ -80,17 +70,18 @@ function PagesPanel() {
       <header className="flex h-9 shrink-0 items-center justify-between pr-2 pl-3">
         <h2 className="text-[10.5px] font-semibold tracking-wider text-ink-400 uppercase">Pages</h2>
         <div className="flex items-center gap-0.5">
-          <button type="button" aria-label="Add page" title="Add page" onClick={createPageAction} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+          <button type="button" aria-label="Add page" data-tip="Add page" onClick={createPageAction} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
             <Plus size={14} strokeWidth={1.75} />
           </button>
           <button
             type="button"
             aria-label="Hide sidebar"
-            title="Hide sidebar (Ctrl+\)"
+            data-tip="Hide sidebar"
+            data-tip-shortcut={"Mod+\\"}
             onClick={() => useEditor.setState({ showLeftSidebar: false })}
             className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100"
           >
-            <PanelLeftClose size={14} strokeWidth={1.75} />
+            <IconSidebarLeft size={16} />
           </button>
         </div>
       </header>
@@ -137,7 +128,7 @@ function PagesPanel() {
                   <button
                     type="button"
                     aria-label={`Delete ${page.name}`}
-                    title="Delete page"
+                    data-tip="Delete page"
                     onClick={(e) => {
                       e.stopPropagation();
                       deletePageAction(page.id);
@@ -285,7 +276,7 @@ const LayerRow = memo(function LayerRow({
       ) : (
         <span className="w-4 shrink-0" />
       )}
-      <Icon size={12} strokeWidth={1.75} className={`mr-0.5 shrink-0 ${selected ? "text-accent-hover" : "text-ink-400"}`} />
+      <Icon size={14} className={`mr-0.5 shrink-0 ${selected ? "text-accent-hover" : "text-ink-400"}`} />
       {renaming ? (
         <RenameInput
           label="Layer name"
@@ -303,7 +294,7 @@ const LayerRow = memo(function LayerRow({
           <button
             type="button"
             aria-label={node.locked ? "Unlock" : "Lock"}
-            title={node.locked ? "Unlock" : "Lock"}
+            data-tip={node.locked ? "Unlock" : "Lock"}
             onClick={(e) => {
               e.stopPropagation();
               useEditor.getState().edit((p) => patchNodes(p, [id], { locked: !node.locked }));
@@ -315,7 +306,7 @@ const LayerRow = memo(function LayerRow({
           <button
             type="button"
             aria-label={node.visible ? "Hide" : "Show"}
-            title={node.visible ? "Hide" : "Show"}
+            data-tip={node.visible ? "Hide" : "Show"}
             onClick={(e) => {
               e.stopPropagation();
               useEditor.getState().edit((p) => patchNodes(p, [id], { visible: !node.visible }));

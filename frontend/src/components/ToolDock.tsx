@@ -1,24 +1,23 @@
-import {
-  Check,
-  ChevronUp,
-  Circle,
-  Frame,
-  Hand,
-  LayoutPanelTop,
-  Minus,
-  MousePointer2,
-  PenTool,
-  Square,
-  Star,
-  Triangle,
-  Type,
-  type LucideIcon,
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Check, ChevronUp } from "lucide-react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { useEditor, type Tool } from "../editor/store";
-import { Tooltip, formatShortcut, useDismiss } from "./ui";
+import {
+  IconEllipse,
+  IconSelect,
+  IconFrame,
+  IconHand,
+  IconLine,
+  IconSection,
+  IconPen,
+  IconRectangle,
+  IconStar,
+  IconText,
+  IconPolygon,
+  type IconProps,
+} from "../icons/icons";
+import { formatShortcut, useDismiss } from "./ui";
 
-type ToolDef = { tool: Tool; label: string; key: string; icon: LucideIcon };
+type ToolDef = { tool: Tool; label: string; key: string; icon: ComponentType<IconProps> };
 type ToolGroup = { name: string; tools: [ToolDef, ...ToolDef[]] };
 
 /** Dock order. A group with several tools shows one of them and offers the rest in a flyout. */
@@ -26,29 +25,29 @@ const GROUPS: ToolGroup[] = [
   {
     name: "move",
     tools: [
-      { tool: "select", label: "Select", key: "V", icon: MousePointer2 },
-      { tool: "hand", label: "Hand", key: "H", icon: Hand },
+      { tool: "select", label: "Select", key: "V", icon: IconSelect },
+      { tool: "hand", label: "Hand", key: "H", icon: IconHand },
     ],
   },
   {
     name: "frame",
     tools: [
-      { tool: "frame", label: "Frame", key: "F", icon: Frame },
-      { tool: "section", label: "Section", key: "Shift+S", icon: LayoutPanelTop },
+      { tool: "frame", label: "Frame", key: "F", icon: IconFrame },
+      { tool: "section", label: "Section", key: "Shift+S", icon: IconSection },
     ],
   },
   {
     name: "shape",
     tools: [
-      { tool: "rectangle", label: "Rectangle", key: "R", icon: Square },
-      { tool: "line", label: "Line", key: "L", icon: Minus },
-      { tool: "ellipse", label: "Ellipse", key: "O", icon: Circle },
-      { tool: "polygon", label: "Polygon", key: "Y", icon: Triangle },
-      { tool: "star", label: "Star", key: "S", icon: Star },
+      { tool: "rectangle", label: "Rectangle", key: "R", icon: IconRectangle },
+      { tool: "line", label: "Line", key: "L", icon: IconLine },
+      { tool: "ellipse", label: "Ellipse", key: "O", icon: IconEllipse },
+      { tool: "polygon", label: "Polygon", key: "Y", icon: IconPolygon },
+      { tool: "star", label: "Star", key: "S", icon: IconStar },
     ],
   },
-  { name: "pen", tools: [{ tool: "pen", label: "Pen", key: "P", icon: PenTool }] },
-  { name: "text", tools: [{ tool: "text", label: "Text", key: "T", icon: Type }] },
+  { name: "pen", tools: [{ tool: "pen", label: "Pen", key: "P", icon: IconPen }] },
+  { name: "text", tools: [{ tool: "text", label: "Text", key: "T", icon: IconText }] },
 ];
 
 function DockGroup({ group, tool, setTool }: { group: ToolGroup; tool: Tool; setTool: (tool: Tool) => void }) {
@@ -72,18 +71,22 @@ function DockGroup({ group, tool, setTool }: { group: ToolGroup; tool: Tool; set
           type="button"
           aria-label={`${shown.label} (${formatShortcut(shown.key)})`}
           aria-pressed={active}
+          data-tip={shown.label}
+          data-tip-shortcut={shown.key}
+          data-tip-side="above"
           onClick={() => setTool(shown.tool)}
-          className={`group/tip relative flex h-9 items-center justify-center rounded-[10px] transition-colors duration-100 ${hasMore ? "w-9" : "w-10"} ${
+          className={`relative flex h-9 items-center justify-center rounded-[10px] transition-colors duration-100 ${hasMore ? "w-9" : "w-10"} ${
             active ? "" : "hover:bg-white/8 hover:text-ink-100 active:bg-white/12"
           }`}
         >
-          <Icon size={17} strokeWidth={1.75} />
-          {!open && <Tooltip text={shown.label} shortcut={shown.key} side="above" />}
+          <Icon size={20} />
         </button>
         {hasMore && (
           <button
             type="button"
             aria-label={`More ${group.name} tools`}
+            data-tip={`More ${group.name} tools`}
+            data-tip-side="above"
             aria-haspopup="menu"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
@@ -110,7 +113,7 @@ function DockGroup({ group, tool, setTool }: { group: ToolGroup; tool: Tool; set
               className="group/item flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-left text-ink-100 hover:bg-accent hover:text-white"
             >
               <span className="flex w-3 justify-center">{t.tool === shown.tool && <Check size={12} strokeWidth={2.5} />}</span>
-              <t.icon size={15} strokeWidth={1.75} className="text-ink-300 group-hover/item:text-white" />
+              <t.icon size={16} className="text-ink-300 group-hover/item:text-white" />
               <span className="flex-1">{t.label}</span>
               <span className="pl-4 text-ink-400 group-hover/item:text-white/80">{formatShortcut(t.key)}</span>
             </button>

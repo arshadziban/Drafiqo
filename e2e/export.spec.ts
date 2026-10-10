@@ -69,7 +69,7 @@ async function decode(page: Page, bytes: Buffer, mime: string, x: number, y: num
 test("exports PNG at 1×, 2×, 3× and 4× with matching displayed and actual dimensions", async ({ page }) => {
   await buildArtboard(page);
   await openExport(page);
-  await expect(dialog(page).getByLabel("Export target")).toHaveValue(/.+/);
+  await expect(dialog(page).getByLabel("Export target")).toHaveText(/.+/);
   const expected = { 1: [375, 812], 2: [750, 1624], 3: [1125, 2436], 4: [1500, 3248] } as const;
   for (const [scale, [width, height]] of Object.entries(expected)) {
     await dialog(page).getByRole("button", { name: `${scale}×`, exact: true }).click();

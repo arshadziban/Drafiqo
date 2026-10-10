@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useEditor } from "../editor/store";
 import { hexToHsv, hsvToHex, hsvToRgb, normalizeHex, rgbToHsv, type Hsv } from "./color";
 import { captureCanvas, Eyedropper, type CanvasCapture } from "./Eyedropper";
+import { Select } from "./Select";
 
 // Figma-style colour popover: saturation/brightness area, hue slider,
 // eyedropper, Hex / RGB / HSB fields and recently used colours. It edits the
@@ -157,12 +158,13 @@ export function ColorPicker({ anchor, value, label, onChange, onClose }: { ancho
   useEffect(() => {
     const onPointer = (e: PointerEvent) => {
       const t = e.target as Node;
-      if (samplingRef.current || (t instanceof Element && t.closest("[data-eyedropper]"))) return;
+      if (samplingRef.current || (t instanceof Element && t.closest("[data-eyedropper], [data-select-menu]"))) return;
       if (!popRef.current?.contains(t) && !anchor.contains(t)) onClose();
     };
     // Captured so Escape closes only the picker and doesn't also clear the canvas selection.
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape" || samplingRef.current) return;
+      // Escape belongs to an open dropdown or eyedropper first.
+      if (e.key !== "Escape" || samplingRef.current || document.querySelector("[data-select-menu]")) return;
       e.stopPropagation();
       onClose();
     };
@@ -283,7 +285,7 @@ export function ColorPicker({ anchor, value, label, onChange, onClose }: { ancho
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button type="button" aria-label="Pick colour from canvas" title="Pick colour from canvas" onClick={() => void startSampling()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+          <button type="button" aria-label="Pick colour from canvas" data-tip="Pick colour from canvas" onClick={() => void startSampling()} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
             <Pipette size={14} strokeWidth={1.75} />
           </button>
           <span aria-hidden className="h-7 w-7 shrink-0 rounded-full ring-1 ring-white/20" style={{ background: hex }} />
@@ -304,11 +306,19 @@ export function ColorPicker({ anchor, value, label, onChange, onClose }: { ancho
         </div>
 
         <div className="flex items-start gap-1.5">
-          <select aria-label="Colour format" value={mode} onChange={(e) => setMode(e.target.value as Mode)} className="h-7 w-[3.75rem] shrink-0 rounded-md border border-transparent bg-ink-800 pl-1.5 text-ink-100 transition-colors duration-100 outline-none hover:border-ink-600 focus:border-accent">
-            <option value="hex">Hex</option>
-            <option value="rgb">RGB</option>
-            <option value="hsb">HSB</option>
-          </select>
+          <div className="w-[4.5rem] shrink-0">
+            <Select
+              label="Colour format"
+              value={mode}
+              menuMinWidth={96}
+              options={[
+                { value: "hex", label: "Hex" },
+                { value: "rgb", label: "RGB" },
+                { value: "hsb", label: "HSB" },
+              ]}
+              onChange={setMode}
+            />
+          </div>
           {mode === "hex" && (
             <label className="flex min-w-0 flex-1 flex-col items-center gap-1">
               <input
@@ -358,7 +368,7 @@ export function ColorPicker({ anchor, value, label, onChange, onClose }: { ancho
           <div className="mb-2 text-[10px] font-semibold tracking-wider text-ink-400 uppercase">Recent</div>
           <div className="flex flex-wrap gap-1.5">
             {recent.map((c) => (
-              <button key={c} type="button" aria-label={`Use ${c}`} title={c.toUpperCase()} onClick={() => applyHex(c)} className="h-5 w-5 rounded-[5px] ring-1 ring-white/20 transition-transform duration-100 hover:scale-110" style={{ background: c }} />
+              <button key={c} type="button" aria-label={`Use ${c}`} data-tip={c.toUpperCase()} onClick={() => applyHex(c)} className="h-5 w-5 rounded-[5px] ring-1 ring-white/20 transition-transform duration-100 hover:scale-110" style={{ background: c }} />
             ))}
           </div>
         </div>

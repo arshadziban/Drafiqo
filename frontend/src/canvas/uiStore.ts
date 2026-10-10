@@ -15,6 +15,8 @@ interface CanvasUiState {
   penCursor: { x: number; y: number } | null;
   contextMenu: { x: number; y: number } | null;
   renamingId: NodeId | null;
+  /** The frame or section whose name is being edited on the canvas label. */
+  labelEditId: NodeId | null;
   exportOpen: boolean;
 }
 
@@ -25,5 +27,6 @@ export const useCanvasUi = create<CanvasUiState>()(() => ({
   penCursor: null,
   contextMenu: null,
   renamingId: null,
+  labelEditId: null,
   exportOpen: false,
 }));

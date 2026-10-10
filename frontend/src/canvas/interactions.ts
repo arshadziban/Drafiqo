@@ -492,7 +492,15 @@ export function onDoubleClick(e: ReactMouseEvent<SVGSVGElement>): void {
   if (s.tool !== "select") return;
   const page = currentPage(s);
   // Pointer capture retargets the click to the canvas, so look up what is really under it.
-  const hit = hitNode(document.elementFromPoint(e.clientX, e.clientY), page);
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  // Double-clicking a frame's name above it renames it in place.
+  const labelId = under?.closest("[data-label-id]")?.getAttribute("data-label-id") ?? null;
+  if (labelId && page.nodes[labelId]) {
+    s.select([labelId]);
+    ui.setState({ labelEditId: labelId });
+    return;
+  }
+  const hit = hitNode(under, page);
   if (!hit) return;
   const current = s.selection.length === 1 ? s.selection[0]! : null;
   const currentNode = current ? page.nodes[current] : undefined;

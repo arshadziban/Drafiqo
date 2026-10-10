@@ -42,6 +42,8 @@ cd src-tauri && cargo test        # file-writing tests
 | `e2e/` | Playwright tests. |
 | `assets/branding/` | Source logo files. `frontend/public/drafiqo.svg` (favicon, toolbar) is a copy of `logo.svg`. |
 
+Tool and layer-type icons live as SVG files in `assets/icons/`. After adding or changing one, run `npm run icons` to regenerate `frontend/src/icons/icons.tsx` (a test fails if they drift apart).
+
 To regenerate the desktop app icons after changing the logo: `npx tauri icon assets/branding/logo.svg`.
 
 ## Project files

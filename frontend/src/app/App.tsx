@@ -5,6 +5,7 @@ import { LeftSidebar } from "../components/LeftSidebar";
 import { PropertiesPanel } from "../components/PropertiesPanel";
 import { ToolDock } from "../components/ToolDock";
 import { Toolbar } from "../components/Toolbar";
+import { TooltipLayer } from "../components/TooltipLayer";
 import { isDirty, useEditor } from "../editor/store";
 import { confirmDiscard } from "../storage/fileActions";
 import { platform } from "../storage/platform";
@@ -40,6 +41,7 @@ export function App() {
         <PropertiesPanel />
       </div>
       <ExportDialog />
+      <TooltipLayer />
     </div>
   );
 }

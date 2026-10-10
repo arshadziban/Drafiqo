@@ -1,7 +1,6 @@
 import {
   ChevronDown,
   Minus,
-  PanelLeftOpen,
   Plus,
   Redo2,
   Square,
@@ -29,11 +28,12 @@ import {
   zoomToFit,
 } from "../editor/actions";
 import { currentViewport, isDirty, useEditor } from "../editor/store";
+import { IconSidebarRight } from "../icons/icons";
 import { newProject, openProject, openRecentProject, renameProject, saveProject, saveProjectAs } from "../storage/fileActions";
 import { platform } from "../storage/platform";
 import { loadRecent } from "../storage/recent";
 import { openExportDialog } from "./openExportDialog";
-import { IconButton, MenuList, Tooltip, useDismiss, type MenuEntry } from "./ui";
+import { IconButton, MenuList, useDismiss, type MenuEntry } from "./ui";
 
 const Divider = () => <div className="mx-1.5 h-4 w-px shrink-0 bg-ink-700" />;
 
@@ -144,7 +144,7 @@ function ProjectName({ name }: { name: string }) {
     return (
       <button
         type="button"
-        title="Rename project"
+        data-tip="Rename project"
         onClick={() => setEditing(true)}
         data-testid="project-name"
         className="-mx-1.5 h-7 min-w-0 truncate rounded-md px-1.5 text-[12.5px] font-semibold text-ink-100 transition-colors duration-100 hover:bg-ink-700"
@@ -194,7 +194,7 @@ function SaveStatus() {
     return (
       <button
         type="button"
-        title={error ?? undefined}
+        data-tip={error ?? undefined}
         onClick={() => void saveProject()}
         className="flex h-6 items-center gap-1.5 rounded-md bg-red-500/15 px-2 font-medium text-red-300 hover:bg-red-500/25"
       >
@@ -246,8 +246,8 @@ export function Toolbar() {
         <Menu label="View" items={viewMenu} />
         <Menu label="Object" items={objectMenu} />
         {!showLeft && (
-          <IconButton tooltip label="Show sidebar" shortcut="Mod+\\" onClick={() => useEditor.setState({ showLeftSidebar: true })}>
-            <PanelLeftOpen size={15} strokeWidth={1.75} />
+          <IconButton label="Show sidebar" shortcut={"Mod+\\"} onClick={() => useEditor.setState({ showLeftSidebar: true })}>
+            <IconSidebarRight size={18} />
           </IconButton>
         )}
       </div>
@@ -261,24 +261,23 @@ export function Toolbar() {
       </div>
 
       <div data-tauri-drag-region className="flex flex-1 items-center justify-end gap-0.5">
-        <IconButton tooltip label="Undo" shortcut="Mod+Z" disabled={!canUndo} onClick={undo}>
+        <IconButton label="Undo" shortcut="Mod+Z" disabled={!canUndo} onClick={undo}>
           <Undo2 size={15} strokeWidth={1.75} />
         </IconButton>
-        <IconButton tooltip label="Redo" shortcut="Mod+Shift+Z" disabled={!canRedo} onClick={redo}>
+        <IconButton label="Redo" shortcut="Mod+Shift+Z" disabled={!canRedo} onClick={redo}>
           <Redo2 size={15} strokeWidth={1.75} />
         </IconButton>
         <Divider />
         <div className="flex items-center rounded-lg bg-ink-850 p-0.5 ring-1 ring-white/5">
-          <IconButton tooltip label="Zoom out" shortcut="Mod+-" onClick={zoomOut}>
+          <IconButton label="Zoom out" shortcut="Mod+-" onClick={zoomOut}>
             <Minus size={14} strokeWidth={1.75} />
           </IconButton>
           <Menu
             align="right"
             label={
-              <span className="group/tip relative flex w-14 items-center justify-center gap-1 tabular-nums">
+              <span data-tip="Zoom options" className="flex w-14 items-center justify-center gap-1 tabular-nums">
                 <span data-testid="zoom-level">{Math.round(zoom * 100)}%</span>
                 <ChevronDown size={11} className="text-ink-400" />
-                <Tooltip text="Zoom options" align="right" />
               </span>
             }
             items={() => [
@@ -291,7 +290,7 @@ export function Toolbar() {
               { label: "200%", action: () => zoomTo(2) },
             ]}
           />
-          <IconButton tooltip label="Zoom in" shortcut="Mod++" onClick={zoomIn}>
+          <IconButton label="Zoom in" shortcut="Mod++" onClick={zoomIn}>
             <Plus size={14} strokeWidth={1.75} />
           </IconButton>
         </div>
