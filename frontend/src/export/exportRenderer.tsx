@@ -4,6 +4,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { NodeElement } from "../canvas/renderNode";
+import { effectOutset } from "../document/effects";
 import { applyToPoint, boundsOfPoints, cornersOf, parentWorldMatrix, unionRects, worldMatrix, type Rect } from "../document/geometry";
 import { topLevelSelection } from "../document/tree";
 import { isContainer, type NodeId, type Page } from "../document/types";
@@ -46,13 +47,11 @@ function paintedBounds(page: Page, id: NodeId): Rect | null {
   let right = along;
   let top = stroke;
   let bottom = stroke;
-  for (const effect of node.effects) {
-    if (!effect.visible) continue;
-    left = Math.max(left, along + effect.blur - effect.offsetX);
-    right = Math.max(right, along + effect.blur + effect.offsetX);
-    top = Math.max(top, stroke + effect.blur - effect.offsetY);
-    bottom = Math.max(bottom, stroke + effect.blur + effect.offsetY);
-  }
+  const reach = effectOutset(node.effects);
+  left = Math.max(left, along + reach.left);
+  right = Math.max(right, along + reach.right);
+  top = Math.max(top, stroke + reach.top);
+  bottom = Math.max(bottom, stroke + reach.bottom);
   const m = worldMatrix(page, id);
   const own = boundsOfPoints([
     applyToPoint(m, { x: -left, y: -top }),
@@ -97,6 +96,21 @@ function StaticNode({ page, id }: { page: Page; id: NodeId }) {
   const node = page.nodes[id];
   if (!node) return null;
   return <NodeElement node={node} interactive={false} renderChild={(child) => <StaticNode key={child} page={page} id={child} />} />;
+}
+
+/**
+ * The page as drawn inside `view` (a rectangle in page space), at `size` pixels,
+ * over a solid background. Used to sample colours from what is on screen.
+ */
+export function renderViewSvg(page: Page, view: Rect, size: Size, background: string): string {
+  return renderToStaticMarkup(
+    <svg xmlns="http://www.w3.org/2000/svg" width={size.width} height={size.height} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}>
+      <rect x={view.x} y={view.y} width={view.width} height={view.height} fill={background} />
+      {page.children.map((id) => (
+        <StaticNode key={id} page={page} id={id} />
+      ))}
+    </svg>,
+  );
 }
 
 export interface SvgOptions {

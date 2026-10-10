@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useEditor } from "../editor/store";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { normalizeHex } from "./color";
+import { ColorPicker } from "./ColorPicker";
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -211,45 +212,34 @@ export function NumberField({
 }
 
 /**
- * Colour swatch + hex field. Dragging inside the native picker is wrapped in a
- * transaction so it produces a single undo step.
+ * Colour swatch + hex field. The swatch opens the colour picker popover; the
+ * hex field accepts typed values. Picker gestures are grouped into one undo step.
  */
 export function ColorField({ value, onChange, label }: { value: string | Mixed; onChange: (color: string) => void; label: string }) {
-  const ref = useRef<HTMLInputElement>(null);
+  const swatchRef = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState<string | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const done = () => useEditor.getState().commit();
-    el.addEventListener("change", done);
-    el.addEventListener("blur", done);
-    return () => {
-      el.removeEventListener("change", done);
-      el.removeEventListener("blur", done);
-    };
-  }, []);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
 
   const commitHex = (text: string) => {
     setDraft(null);
-    let hex = text.trim().replace(/^#/, "");
-    if (/^[0-9a-fA-F]{3}$/.test(hex)) hex = [...hex].map((c) => c + c).join("");
-    if (/^[0-9a-fA-F]{6}$/.test(hex) && `#${hex.toLowerCase()}` !== value) onChange(`#${hex.toLowerCase()}`);
+    const hex = normalizeHex(text);
+    if (hex && hex !== value) onChange(hex);
   };
 
   return (
     <div className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 border border-transparent bg-ink-800 transition-colors duration-100 hover:border-ink-600 focus-within:border-accent focus-within:bg-ink-950">
-      <input
-        ref={ref}
-        type="color"
+      <button
+        ref={swatchRef}
+        type="button"
         aria-label={`${label} colour`}
-        className="h-4 w-4 shrink-0 appearance-none rounded-[3px] bg-transparent p-0 ring-1 ring-white/20 [&::-webkit-color-swatch]:rounded-sm [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch-wrapper]:p-0"
-        value={value === "mixed" ? "#000000" : value}
-        onChange={(e) => {
-          useEditor.getState().begin();
-          onChange(e.target.value);
-        }}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="h-4 w-4 shrink-0 rounded-[3px] ring-1 ring-white/20 transition-shadow duration-100 hover:ring-white/50"
+        style={{ background: value === "mixed" ? "repeating-conic-gradient(#42464e 0% 25%, #868b95 0% 50%) 50% / 6px 6px" : value }}
       />
+      {open && swatchRef.current && <ColorPicker anchor={swatchRef.current} value={value === "mixed" ? "#000000" : value} label={label} onChange={onChange} onClose={close} />}
       <input
         aria-label={`${label} hex`}
         className="w-full min-w-0 bg-transparent text-ink-100 uppercase outline-none"

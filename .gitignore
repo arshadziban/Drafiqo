@@ -9,6 +9,10 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 
+# Mobile icons that `tauri icon` generates; this is a desktop-only app
+src-tauri/icons/android/
+src-tauri/icons/ios/
+
 # Test output
 test-results/
 playwright-report/

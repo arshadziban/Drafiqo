@@ -9,6 +9,7 @@ import {
   LayoutPanelTop,
   Lock,
   Minus,
+  PanelLeftClose,
   PenTool,
   Plus,
   Square,
@@ -78,9 +79,20 @@ function PagesPanel() {
     <div className="flex max-h-[40%] shrink-0 flex-col border-b border-ink-700">
       <header className="flex h-9 shrink-0 items-center justify-between pr-2 pl-3">
         <h2 className="text-[10.5px] font-semibold tracking-wider text-ink-400 uppercase">Pages</h2>
-        <button type="button" aria-label="Add page" title="Add page" onClick={createPageAction} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
-          <Plus size={14} strokeWidth={1.75} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button type="button" aria-label="Add page" title="Add page" onClick={createPageAction} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+            <Plus size={14} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            aria-label="Hide sidebar"
+            title="Hide sidebar (Ctrl+\)"
+            onClick={() => useEditor.setState({ showLeftSidebar: false })}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100"
+          >
+            <PanelLeftClose size={14} strokeWidth={1.75} />
+          </button>
+        </div>
       </header>
       <ul className="overflow-y-auto pb-2" data-testid="pages">
         {pages.map((page, index) => (

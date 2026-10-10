@@ -17,14 +17,16 @@ import {
   RotateCw,
   Scan,
 } from "lucide-react";
-import { dropShadow, solidPaint } from "../document/factory";
+import { useCallback, useState } from "react";
+import { convertEffect } from "../document/effects";
+import { dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
 import { getPage } from "../document/tree";
-import type { Effect, NodeId, Paint, SceneNode, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
+import type { Effect, EffectType, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
 import { FRAME_PRESETS, alignSelection, distributeSelection, insertFramePreset } from "../editor/actions";
 import { patchNodes, resizeNode, type NodePatch } from "../editor/commands";
 import { currentPage, useEditor } from "../editor/store";
 import { openExportDialog } from "./openExportDialog";
-import { ColorField, IconButton, NumberField, Section, Select, shared, type Mixed } from "./ui";
+import { ColorField, IconButton, MenuList, NumberField, Section, Select, shared, useDismiss, type Mixed } from "./ui";
 
 const FONT_FAMILIES = ["Arial", "Helvetica", "Verdana", "Trebuchet MS", "Georgia", "Times New Roman", "Courier New", "Menlo", "Segoe UI", "system-ui"];
 const FONT_WEIGHTS = [
@@ -263,41 +265,83 @@ function PaintList({
   );
 }
 
+const EFFECT_LABELS: Record<EffectType, string> = { "drop-shadow": "Drop shadow", "inner-shadow": "Inner shadow", "layer-blur": "Layer blur" };
+const EFFECT_OPTIONS = (Object.keys(EFFECT_LABELS) as EffectType[]).map((value) => ({ value, label: EFFECT_LABELS[value] }));
+
+/** The "+" button of the Effects section: choose which effect to add. */
+function AddEffectMenu({ onAdd, hasBlur }: { onAdd: (effect: Effect) => void; hasBlur: boolean }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useDismiss(open, close);
+  return (
+    <div ref={ref} className="relative -mr-1">
+      <button type="button" aria-label="Add effect" title="Add effect" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+        <Plus size={14} strokeWidth={1.75} />
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 z-30 mt-1">
+          <MenuList
+            onClose={close}
+            items={[
+              { label: EFFECT_LABELS["drop-shadow"], action: () => onAdd(dropShadow()) },
+              { label: EFFECT_LABELS["inner-shadow"], action: () => onAdd(innerShadow()) },
+              // A layer has one blur; a second would be ignored.
+              { label: EFFECT_LABELS["layer-blur"], disabled: hasBlur, action: () => onAdd(layerBlur()) },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Effects({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
   const effects = shared(nodes, (n) => n.effects);
   const list = effects === "mixed" ? [] : effects;
   const set = (next: Effect[]) => edit(ids, { effects: next });
-  const update = (id: string, patch: Partial<Effect>) => set(list.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  const update = (id: string, patch: Partial<ShadowEffect> & Partial<LayerBlurEffect>) => set(list.map((e) => (e.id === id ? ({ ...e, ...patch } as Effect) : e)));
+  const hasBlur = list.some((e) => e.type === "layer-blur");
   return (
-    <Section
-      title="Effects"
-      action={
-        <button type="button" aria-label="Add drop shadow" title="Add drop shadow" onClick={() => set([...list, dropShadow()])} className="-mr-1 flex h-6 w-6 items-center justify-center rounded-md text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
-          <Plus size={14} strokeWidth={1.75} />
-        </button>
-      }
-    >
+    <Section title="Effects" action={<AddEffectMenu hasBlur={hasBlur} onAdd={(effect) => set([...list, effect])} />}>
       {effects === "mixed" && <p className="text-ink-400">Mixed — add one to replace them all.</p>}
-      {list.map((effect) => (
-        <div key={effect.id} className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <span className="w-12 shrink-0 text-ink-300">Shadow</span>
-            <ColorField label="Shadow" value={effect.color} onChange={(color) => update(effect.id, { color })} />
-            <IconButton label={effect.visible ? "Hide" : "Show"} onClick={() => update(effect.id, { visible: !effect.visible })}>
-              {effect.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-            </IconButton>
-            <IconButton label="Remove effect" onClick={() => set(list.filter((e) => e.id !== effect.id))}>
-              <Minus size={13} />
-            </IconButton>
+      {list.map((effect) => {
+        const name = EFFECT_LABELS[effect.type];
+        // Another layer blur already exists, so this row can't become one.
+        const options = hasBlur && effect.type !== "layer-blur" ? EFFECT_OPTIONS.filter((o) => o.value !== "layer-blur") : EFFECT_OPTIONS;
+        return (
+          <div key={effect.id} className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <Select label="Effect type" value={effect.type} options={options} onChange={(type) => set(list.map((e) => (e.id === effect.id ? convertEffect(e, type) : e)))} />
+              </div>
+              <IconButton label={effect.visible ? "Hide" : "Show"} onClick={() => update(effect.id, { visible: !effect.visible })}>
+                {effect.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+              </IconButton>
+              <IconButton label="Remove effect" onClick={() => set(list.filter((e) => e.id !== effect.id))}>
+                <Minus size={13} />
+              </IconButton>
+            </div>
+            {effect.type === "layer-blur" ? (
+              <NumberField label="Blur" title="Layer blur" min={0} value={effect.blur} onChange={(blur) => update(effect.id, { blur })} />
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <ColorField label={name} value={effect.color} onChange={(color) => update(effect.id, { color })} />
+                  <div className="w-16 shrink-0">
+                    <NumberField label="" title={`${name} opacity`} suffix="%" min={0} max={100} value={Math.round(effect.opacity * 100)} onChange={(o) => update(effect.id, { opacity: o / 100 })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <NumberField label="X" title={`${name} X offset`} value={effect.offsetX} onChange={(offsetX) => update(effect.id, { offsetX })} />
+                  <NumberField label="Y" title={`${name} Y offset`} value={effect.offsetY} onChange={(offsetY) => update(effect.id, { offsetY })} />
+                  <NumberField label="Blur" title={`${name} blur`} min={0} value={effect.blur} onChange={(blur) => update(effect.id, { blur })} />
+                  <NumberField label="Spread" title={`${name} spread`} value={effect.spread} onChange={(spread) => update(effect.id, { spread })} />
+                </div>
+              </>
+            )}
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            <NumberField label="X" title="Shadow X offset" value={effect.offsetX} onChange={(offsetX) => update(effect.id, { offsetX })} />
-            <NumberField label="Y" title="Shadow Y offset" value={effect.offsetY} onChange={(offsetY) => update(effect.id, { offsetY })} />
-            <NumberField label="B" title="Shadow blur" min={0} value={effect.blur} onChange={(blur) => update(effect.id, { blur })} />
-            <NumberField label="%" title="Shadow opacity" min={0} max={100} value={Math.round(effect.opacity * 100)} onChange={(o) => update(effect.id, { opacity: o / 100 })} />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </Section>
   );
 }

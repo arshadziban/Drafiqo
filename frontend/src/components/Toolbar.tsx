@@ -1,9 +1,12 @@
 import {
   ChevronDown,
   Minus,
+  PanelLeftOpen,
   Plus,
   Redo2,
+  Square,
   Undo2,
+  X,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import {
@@ -100,6 +103,8 @@ function viewMenu(): MenuEntry[] {
     { label: "Zoom out", shortcut: "Mod+-", action: zoomOut },
     { label: "Zoom to 100%", shortcut: "Mod+0", action: () => zoomTo(1) },
     { label: "Zoom to fit", shortcut: "Shift+1", action: zoomToFit },
+    "separator",
+    { label: "Left sidebar", shortcut: "Mod+\\", checked: s.showLeftSidebar, action: () => useEditor.setState({ showLeftSidebar: !s.showLeftSidebar }) },
     "separator",
     { label: "Grid", shortcut: "Mod+'", checked: s.showGrid, action: () => useEditor.setState({ showGrid: !s.showGrid }) },
     { label: "Snapping", checked: s.snapEnabled, action: () => useEditor.setState({ snapEnabled: !s.snapEnabled }) },
@@ -202,6 +207,24 @@ function SaveStatus() {
   return <StatusPill tone={hasFile ? "bg-emerald-400" : "bg-ink-600"}>{hasFile ? "Saved" : "Not saved yet"}</StatusPill>;
 }
 
+/** The desktop window is frameless, so the toolbar supplies minimise, maximise and close. */
+function WindowControls() {
+  const base = "flex h-12 w-11 items-center justify-center text-ink-300 transition-colors";
+  return (
+    <div className="-mr-2.5 ml-2 flex self-stretch">
+      <button type="button" aria-label="Minimize window" className={`${base} hover:bg-white/8 hover:text-ink-100`} onClick={() => platform.minimizeWindow()}>
+        <Minus size={15} strokeWidth={1.5} />
+      </button>
+      <button type="button" aria-label="Maximize window" className={`${base} hover:bg-white/8 hover:text-ink-100`} onClick={() => platform.toggleMaximizeWindow()}>
+        <Square size={11} strokeWidth={1.75} />
+      </button>
+      <button type="button" aria-label="Close window" className={`${base} hover:bg-red-600 hover:text-white`} onClick={() => platform.closeWindow()}>
+        <X size={16} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
+}
+
 export function Toolbar() {
   const name = useEditor((s) => s.doc.name);
   const zoom = useEditor((s) => currentViewport(s).zoom);
@@ -209,18 +232,27 @@ export function Toolbar() {
   const canRedo = useEditor((s) => s.history.future.length > 0);
   const undo = useEditor((s) => s.undo);
   const redo = useEditor((s) => s.redo);
+  const showLeft = useEditor((s) => s.showLeftSidebar);
 
   return (
-    <header className="relative z-40 flex h-12 shrink-0 items-center border-b border-black/40 bg-ink-900 px-2.5 shadow-[0_1px_0_rgb(255_255_255/0.03)]">
-      <div className="flex flex-1 items-center gap-0.5">
+    <header
+      data-tauri-drag-region
+      className="relative z-40 flex h-12 shrink-0 items-center border-b border-black/40 bg-ink-900 pl-2.5 pr-2.5 shadow-[0_1px_0_rgb(255_255_255/0.03)]"
+    >
+      <div data-tauri-drag-region className="flex flex-1 items-center gap-0.5">
         <img src="/drafiqo.svg" alt="Drafiqo" className="mr-2 h-7 w-7 rounded-md" />
         <Menu label="File" items={fileMenu} />
         <Menu label="Edit" items={editMenu} />
         <Menu label="View" items={viewMenu} />
         <Menu label="Object" items={objectMenu} />
+        {!showLeft && (
+          <IconButton tooltip label="Show sidebar" shortcut="Mod+\\" onClick={() => useEditor.setState({ showLeftSidebar: true })}>
+            <PanelLeftOpen size={15} strokeWidth={1.75} />
+          </IconButton>
+        )}
       </div>
 
-      <div className="flex min-w-0 items-center justify-center gap-2.5 px-4">
+      <div data-tauri-drag-region className="flex min-w-0 items-center justify-center gap-2.5 px-4">
         <ProjectName name={name} />
         <span className="h-3 w-px shrink-0 bg-ink-700" />
         <span className="shrink-0" data-testid="save-status">
@@ -228,7 +260,7 @@ export function Toolbar() {
         </span>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-0.5">
+      <div data-tauri-drag-region className="flex flex-1 items-center justify-end gap-0.5">
         <IconButton tooltip label="Undo" shortcut="Mod+Z" disabled={!canUndo} onClick={undo}>
           <Undo2 size={15} strokeWidth={1.75} />
         </IconButton>
@@ -264,6 +296,7 @@ export function Toolbar() {
           </IconButton>
         </div>
       </div>
+      {platform.kind === "desktop" && <WindowControls />}
     </header>
   );
 }

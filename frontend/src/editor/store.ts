@@ -37,6 +37,7 @@ export interface EditorState {
   editingTextId: NodeId | null;
   showGrid: boolean;
   snapEnabled: boolean;
+  showLeftSidebar: boolean;
   collapsed: Record<NodeId, boolean>;
 
   filePath: string | null;
@@ -97,6 +98,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
   editingTextId: null,
   showGrid: false,
   snapEnabled: true,
+  showLeftSidebar: true,
   collapsed: {},
 
   filePath: null,

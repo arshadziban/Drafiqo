@@ -59,7 +59,7 @@ export function TextEditor() {
         marginLeft: -slackShift,
         padding: 0,
         border: "none",
-        outline: `${1 / viewport.zoom}px solid #7c5cff`,
+        outline: `${1 / viewport.zoom}px solid #007aff`,
         background: "transparent",
         resize: "none",
         overflow: "hidden",
@@ -72,7 +72,7 @@ export function TextEditor() {
         letterSpacing: node.letterSpacing,
         textAlign: node.textAlign,
         color: node.fills.find((f) => f.visible)?.color ?? "#000000",
-        caretColor: "#7c5cff",
+        caretColor: "#007aff",
       }}
     />
   );

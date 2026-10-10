@@ -113,6 +113,10 @@ function handle(e: KeyboardEvent): boolean {
       case "'":
         useEditor.setState({ showGrid: !s.showGrid });
         return true;
+      case "\\":
+        if (e.shiftKey) return false;
+        useEditor.setState({ showLeftSidebar: !s.showLeftSidebar });
+        return true;
       default:
         return false;
     }

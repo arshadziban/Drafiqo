@@ -6,7 +6,28 @@ type RawDocument = Record<string, unknown>;
  * Migrations keyed by the schema version they upgrade *from*. Each returns a
  * document one version newer. Add an entry whenever SCHEMA_VERSION is bumped.
  */
-const MIGRATIONS: Record<number, (doc: RawDocument) => RawDocument> = {};
+const MIGRATIONS: Record<number, (doc: RawDocument) => RawDocument> = {
+  // v2: shadows gained `spread`; every v1 effect is a drop shadow, which had none.
+  1: (doc) => {
+    const pages = Array.isArray(doc.pages) ? doc.pages : [];
+    return {
+      ...doc,
+      pages: pages.map((page: unknown) => {
+        if (typeof page !== "object" || page === null) return page;
+        const nodes = (page as { nodes?: unknown }).nodes;
+        if (typeof nodes !== "object" || nodes === null) return page;
+        const upgraded = Object.fromEntries(
+          Object.entries(nodes).map(([id, node]) => {
+            const effects = (node as { effects?: unknown }).effects;
+            if (!Array.isArray(effects)) return [id, node];
+            return [id, { ...(node as object), effects: effects.map((e) => (typeof e === "object" && e !== null && !("spread" in e) ? { ...e, spread: 0 } : e)) }];
+          }),
+        );
+        return { ...(page as object), nodes: upgraded };
+      }),
+    };
+  },
+};
 
 export class ProjectFormatError extends Error {}
 

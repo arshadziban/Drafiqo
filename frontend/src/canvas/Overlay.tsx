@@ -5,7 +5,7 @@ import { currentPage, currentViewport, useEditor, type Viewport } from "../edito
 import { vectorPath } from "./shapes";
 import { useCanvasUi } from "./uiStore";
 
-const ACCENT = "#7c5cff";
+const ACCENT = "#007aff";
 const GUIDE = "#ff4d8d";
 
 const viewMatrix = (v: Viewport): Matrix => [v.zoom, 0, 0, v.zoom, v.x, v.y];
@@ -99,7 +99,7 @@ function FrameLabels({ page, view, selection }: { page: Page; view: Matrix; sele
             y={-7}
             fontSize={11}
             fill={selection.includes(id) ? ACCENT : "#a3aaba"}
-            style={{ cursor: "default" }}
+            style={{ cursor: "var(--cursor-app)" }}
           >
             {node.name}
           </text>

@@ -40,6 +40,9 @@ cd src-tauri && cargo test        # file-writing tests
 | `frontend/src/storage/` | `.drafiqo` serialisation, save/open, recent projects, desktop/browser adapter. |
 | `src-tauri/` | Desktop shell and the Rust commands that read and atomically write project files. |
 | `e2e/` | Playwright tests. |
+| `assets/branding/` | Source logo files. `frontend/public/drafiqo.svg` (favicon, toolbar) is a copy of `logo.svg`. |
+
+To regenerate the desktop app icons after changing the logo: `npx tauri icon assets/branding/logo.svg`.
 
 ## Project files
 

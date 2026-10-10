@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createEllipse, createFrame, createLine, createPage, createRectangle, createText, dropShadow, solidPaint } from "../document/factory";
+import { createEllipse, createFrame, createLine, createPage, createRectangle, createText, dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
 import type { Page } from "../document/types";
 import { groupNodes, insertNode, patchNodes } from "../editor/commands";
 import { editHeight, editWidth, effectiveScale, initialRasterSize, proportionsDiffer, selectScale, setAspectLock, sizeForScale } from "./exportDimensions";
@@ -140,6 +140,27 @@ describe("export targets and bounds", () => {
     expect(sourceBounds(s.page, targetOf(s.page, s.loose))).toEqual({ x: 598, y: 58, width: 84, height: 44 });
     const shadowed = patchNodes(s.page, [s.card], { effects: [{ ...dropShadow(), blur: 10, offsetX: 0, offsetY: 6 }] });
     expect(sourceBounds(shadowed, targetOf(shadowed, s.card))).toEqual({ x: 110, y: 76, width: 220, height: 120 });
+  });
+
+  it("makes room for spread and blur, and for nothing an inner shadow paints", () => {
+    const s = scene();
+    const card = { x: 120, y: 80, width: 200, height: 100 };
+    const spread = patchNodes(s.page, [s.card], { effects: [{ ...dropShadow(), blur: 10, spread: 5, offsetX: 0, offsetY: 0 }] });
+    expect(sourceBounds(spread, targetOf(spread, s.card))).toEqual({ x: card.x - 15, y: card.y - 15, width: card.width + 30, height: card.height + 30 });
+    const blurred = patchNodes(s.page, [s.card], { effects: [{ ...layerBlur(), blur: 12 }] });
+    expect(sourceBounds(blurred, targetOf(blurred, s.card))).toEqual({ x: card.x - 12, y: card.y - 12, width: card.width + 24, height: card.height + 24 });
+    const inner = patchNodes(s.page, [s.card], { effects: [{ ...innerShadow(), blur: 30, offsetX: 20, offsetY: 20 }] });
+    expect(sourceBounds(inner, targetOf(inner, s.card))).toEqual(card);
+  });
+
+  it("writes every effect into an exported SVG", () => {
+    const s = scene();
+    const page = patchNodes(s.page, [s.card], { effects: [dropShadow(), innerShadow(), layerBlur()] });
+    const svg = renderSvg(page, targetOf(page, s.card));
+    expect(svg).toContain("<filter");
+    expect(svg).toContain("feGaussianBlur"); // layer blur and both shadows
+    expect(svg).toContain("feComponentTransfer"); // inner shadow's inverted edge
+    expect((svg.match(/<feFlood/g) ?? []).length).toBe(2); // one colour per shadow
   });
 
   it("gives a thin line a real area to export", () => {
@@ -321,7 +342,7 @@ describe("PDF export", () => {
     let page = patchNodes(s.page, [s.card], { effects: [dropShadow()] });
     page = patchNodes(page, [s.title], { text: "Привет", fontFamily: "Georgia" });
     const { warnings, bytes } = exportVectorPdf(page, request(targetOf(page, s.frame), { format: "pdf" }));
-    expect(warnings.join("\n")).toMatch(/Drop shadows are not included/);
+    expect(warnings.join("\n")).toMatch(/Shadows and blur effects are not included/);
     expect(warnings.join("\n")).toMatch(/replaced with/);
     expect(warnings.join("\n")).toMatch(/Georgia uses the PDF's built-in Times/);
     expect(text(bytes)).toContain("/BaseFont /Times-Roman");

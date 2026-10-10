@@ -1,7 +1,7 @@
 // The Drafiqo document model. Plain JSON-serializable data, independent of
 // React and of how the canvas is rendered.
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const FILE_FORMAT = "drafiqo";
 
 export type NodeId = string;
@@ -17,17 +17,30 @@ export interface SolidPaint {
 }
 export type Paint = SolidPaint;
 
-export interface DropShadowEffect {
+/** A shadow cast behind the layer, or one painted inside its edges. */
+export interface ShadowEffect {
   id: string;
-  type: "drop-shadow";
+  type: "drop-shadow" | "inner-shadow";
   color: string;
   opacity: number;
   offsetX: number;
   offsetY: number;
   blur: number;
+  /** Grows (positive) or shrinks (negative) the shadow before it is blurred. */
+  spread: number;
   visible: boolean;
 }
-export type Effect = DropShadowEffect;
+
+/** Blurs the whole layer. */
+export interface LayerBlurEffect {
+  id: string;
+  type: "layer-blur";
+  blur: number;
+  visible: boolean;
+}
+
+export type Effect = ShadowEffect | LayerBlurEffect;
+export type EffectType = Effect["type"];
 
 export type StrokeCap = "butt" | "round" | "square";
 export type StrokeJoin = "miter" | "round" | "bevel";

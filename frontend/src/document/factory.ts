@@ -3,7 +3,8 @@ import {
   SCHEMA_VERSION,
   type BaseNode,
   type DrafiqoDocument,
-  type DropShadowEffect,
+  type LayerBlurEffect,
+  type ShadowEffect,
   type EllipseNode,
   type FrameNode,
   type GroupNode,
@@ -36,7 +37,7 @@ export function solidPaint(color: string, opacity = 1): SolidPaint {
   return { id: createId("p"), type: "solid", color, opacity, visible: true };
 }
 
-export function dropShadow(): DropShadowEffect {
+export function dropShadow(): ShadowEffect {
   return {
     id: createId("fx"),
     type: "drop-shadow",
@@ -45,8 +46,17 @@ export function dropShadow(): DropShadowEffect {
     offsetX: 0,
     offsetY: 4,
     blur: 8,
+    spread: 0,
     visible: true,
   };
+}
+
+export function innerShadow(): ShadowEffect {
+  return { ...dropShadow(), type: "inner-shadow" };
+}
+
+export function layerBlur(): LayerBlurEffect {
+  return { id: createId("fx"), type: "layer-blur", blur: 8, visible: true };
 }
 
 export interface Box {

@@ -127,7 +127,7 @@ export function Canvas() {
     if (tool !== "pen") finishPen(false, false);
   }, [tool]);
 
-  const cursor = panning || tool === "hand" ? "grab" : tool === "select" ? "default" : tool === "text" ? "text" : "crosshair";
+  const cursor = panning || tool === "hand" ? "grab" : tool === "select" ? "var(--cursor-app)" : tool === "text" ? "text" : "crosshair";
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden" style={{ background, cursor }} data-testid="canvas">

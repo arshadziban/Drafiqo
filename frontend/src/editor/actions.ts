@@ -204,16 +204,21 @@ function canvasCentre() {
   return { x: width / 2, y: height / 2 };
 }
 
-const ZOOM_STEPS = [0.02, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 8, 16, 32, 64];
+/** Each zoom in/out click moves by 10 percentage points (100% → 110% → 120%). */
+const ZOOM_STEP = 0.1;
+
+function stepZoom(direction: 1 | -1): void {
+  const z = currentViewport(state()).zoom;
+  const next = Math.round((z + direction * ZOOM_STEP) * 100) / 100;
+  zoomAt(canvasCentre(), next);
+}
 
 export function zoomIn(): void {
-  const z = currentViewport(state()).zoom;
-  zoomAt(canvasCentre(), ZOOM_STEPS.find((step) => step > z * 1.001) ?? MAX_ZOOM);
+  stepZoom(1);
 }
 
 export function zoomOut(): void {
-  const z = currentViewport(state()).zoom;
-  zoomAt(canvasCentre(), [...ZOOM_STEPS].reverse().find((step) => step < z * 0.999) ?? MIN_ZOOM);
+  stepZoom(-1);
 }
 
 export function zoomTo(zoom: number): void {

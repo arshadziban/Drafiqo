@@ -1,7 +1,8 @@
 import { Fragment, type ReactElement, type ReactNode, type SVGProps } from "react";
 import { localMatrix } from "../document/geometry";
 import { layoutText } from "../document/textLayout";
-import type { Effect, NodeId, Paint, SceneNode, TextNode } from "../document/types";
+import { activeLayerBlur, filterPad } from "../document/effects";
+import type { Effect, NodeId, Paint, SceneNode, ShadowEffect, TextNode } from "../document/types";
 import { polygonPoints, starPoints, vectorPath } from "./shapes";
 
 type ShapeProps = SVGProps<SVGElement>;
@@ -80,31 +81,56 @@ function TextContent({ node, paint }: { node: TextNode; paint: Paint }) {
   );
 }
 
-function ShadowFilter({ id, node, effects }: { id: string; node: SceneNode; effects: Effect[] }) {
-  const pad = Math.max(...effects.map((e) => e.blur * 2 + Math.max(Math.abs(e.offsetX), Math.abs(e.offsetY)))) + node.strokeWidth + 2;
+/**
+ * One filter for all of a layer's effects, applied in Figma's order: the layer
+ * is blurred, inner shadows are painted inside it, and drop shadows are cast
+ * from the result underneath.
+ */
+function EffectsFilter({ id, node, effects }: { id: string; node: SceneNode; effects: Effect[] }) {
+  const layerBlur = activeLayerBlur(effects);
+  const inner = effects.filter((e): e is ShadowEffect => e.type === "inner-shadow");
+  const drops = effects.filter((e): e is ShadowEffect => e.type === "drop-shadow");
+  const pad = filterPad(effects) + node.strokeWidth + 2;
+  const grown = (input: string, spread: number, result: string) =>
+    spread === 0 ? null : <feMorphology in={input} operator={spread > 0 ? "dilate" : "erode"} radius={Math.abs(spread)} result={result} />;
   return (
-    <filter
-      id={id}
-      filterUnits="userSpaceOnUse"
-      x={-pad}
-      y={-pad}
-      width={node.width + pad * 2}
-      height={node.height + pad * 2}
-      colorInterpolationFilters="sRGB"
-    >
-      {effects.map((e, i) => (
+    <filter id={id} filterUnits="userSpaceOnUse" x={-pad} y={-pad} width={node.width + pad * 2} height={node.height + pad * 2} colorInterpolationFilters="sRGB">
+      {layerBlur > 0 ? <feGaussianBlur in="SourceGraphic" stdDeviation={layerBlur / 2} result="base" /> : <feOffset in="SourceGraphic" result="base" />}
+      <feColorMatrix in="base" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="baseAlpha" />
+      {inner.map((e, i) => (
         <Fragment key={e.id}>
-          <feGaussianBlur in="SourceAlpha" stdDeviation={e.blur / 2} result={`blur${i}`} />
+          {/* The shadow starts outside the shape and bleeds in through its edges. */}
+          <feComponentTransfer in="baseAlpha" result={`outside${i}`}>
+            <feFuncA type="table" tableValues="1 0" />
+          </feComponentTransfer>
+          {grown(`outside${i}`, e.spread, `reach${i}`)}
+          <feGaussianBlur in={e.spread === 0 ? `outside${i}` : `reach${i}`} stdDeviation={e.blur / 2} result={`soft${i}`} />
+          <feOffset in={`soft${i}`} dx={e.offsetX} dy={e.offsetY} result={`moved${i}`} />
+          <feFlood floodColor={e.color} floodOpacity={e.opacity} result={`ink${i}`} />
+          <feComposite in={`ink${i}`} in2={`moved${i}`} operator="in" result={`cast${i}`} />
+          <feComposite in={`cast${i}`} in2="baseAlpha" operator="in" result={`inner${i}`} />
+        </Fragment>
+      ))}
+      <feMerge result="body">
+        <feMergeNode in="base" />
+        {inner.map((e, i) => (
+          <feMergeNode key={e.id} in={`inner${i}`} />
+        ))}
+      </feMerge>
+      {drops.map((e, i) => (
+        <Fragment key={e.id}>
+          {grown("baseAlpha", e.spread, `wide${i}`)}
+          <feGaussianBlur in={e.spread === 0 ? "baseAlpha" : `wide${i}`} stdDeviation={e.blur / 2} result={`blur${i}`} />
           <feOffset in={`blur${i}`} dx={e.offsetX} dy={e.offsetY} result={`offset${i}`} />
           <feFlood floodColor={e.color} floodOpacity={e.opacity} result={`colour${i}`} />
           <feComposite in={`colour${i}`} in2={`offset${i}`} operator="in" result={`shadow${i}`} />
         </Fragment>
       ))}
       <feMerge>
-        {effects.map((e, i) => (
+        {drops.map((e, i) => (
           <feMergeNode key={e.id} in={`shadow${i}`} />
         ))}
-        <feMergeNode in="SourceGraphic" />
+        <feMergeNode in="body" />
       </feMerge>
     </filter>
   );
@@ -126,7 +152,7 @@ export interface NodeElementProps {
 export function NodeElement({ node, renderChild, editing = false, interactive = true }: NodeElementProps): ReactElement | null {
   if (!node.visible) return null;
   const id = node.id;
-  const shadows = node.effects.filter((e) => e.visible);
+  const effects = node.effects.filter((e) => e.visible);
   const filterId = `fx-${id}`;
   const clipId = `clip-${id}`;
   let body: ReactElement;
@@ -175,10 +201,10 @@ export function NodeElement({ node, renderChild, editing = false, interactive = 
       data-node-type={interactive ? node.type : undefined}
       transform={`matrix(${localMatrix(node).join(" ")})`}
       opacity={node.opacity === 1 ? undefined : node.opacity}
-      filter={shadows.length > 0 ? `url(#${filterId})` : undefined}
+      filter={effects.length > 0 ? `url(#${filterId})` : undefined}
       pointerEvents={interactive && node.locked ? "none" : undefined}
     >
-      {shadows.length > 0 && <ShadowFilter id={filterId} node={node} effects={shadows} />}
+      {effects.length > 0 && <EffectsFilter id={filterId} node={node} effects={effects} />}
       {body}
     </g>
   );

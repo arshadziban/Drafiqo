@@ -37,6 +37,10 @@ export interface StoragePlatform {
   confirm(message: string, options: { title: string; okLabel: string }): Promise<boolean>;
   alert(message: string, title: string): Promise<void>;
   setTitle(title: string): void;
+  /** Window frame controls; the desktop window has no native title bar. No-ops in a browser. */
+  minimizeWindow(): void;
+  toggleMaximizeWindow(): void;
+  closeWindow(): void;
   /** Calls `handler` before the window closes; return false to keep it open. */
   onCloseRequested(handler: () => Promise<boolean>): void;
 }
@@ -111,6 +115,15 @@ function desktopPlatform(): StoragePlatform {
     setTitle(title) {
       void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title));
     },
+    minimizeWindow() {
+      void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().minimize());
+    },
+    toggleMaximizeWindow() {
+      void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().toggleMaximize());
+    },
+    closeWindow() {
+      void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().close());
+    },
     onCloseRequested(handler) {
       void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
         getCurrentWindow().onCloseRequested(async (event) => {
@@ -177,6 +190,9 @@ function browserPlatform(): StoragePlatform {
     setTitle(title) {
       document.title = title;
     },
+    minimizeWindow() {},
+    toggleMaximizeWindow() {},
+    closeWindow() {},
     onCloseRequested() {
       window.addEventListener("beforeunload", (event) => {
         // The browser shows its own generic prompt; the handler result cannot be awaited here.

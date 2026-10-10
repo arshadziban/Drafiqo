@@ -11,10 +11,12 @@
   --color-ink-400: #868b95;
   --color-ink-300: #b2b6be;
   --color-ink-100: #eeeff1;
-  --color-accent: #6e56f8;
-  --color-accent-hover: #7f6afa;
-  --color-accent-soft: #6e56f82e;
+  --color-accent: #007aff;
+  --color-accent-hover: #3395ff;
+  --color-accent-soft: #007aff2e;
   --color-mint: #2dd4bf;
+  /* Drafiqo pointer, from assets/branding/cursor.svg. Used over the design canvas only; drawn at 15px. */
+  --cursor-app: url("data:image/svg+xml,%3Csvg width='15' height='15' viewBox='0 0 19 19' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M7.30276 2.12973L13.3363 4.49069C16.8163 5.85243 18.5563 6.53329 18.4986 7.6133C18.4409 8.6934 16.625 9.1886 12.9932 10.1791C11.9119 10.474 11.3712 10.6215 10.9963 10.9963C10.6214 11.3712 10.474 11.9119 10.179 12.9933C9.18864 16.625 8.69334 18.4409 7.61334 18.4986C6.53329 18.5563 5.85243 16.8163 4.49069 13.3363L2.12973 7.30276C0.704049 3.65934 -0.0087913 1.83764 0.914419 0.914419C1.83764 -0.00879139 3.65935 0.704049 7.30276 2.12973Z' fill='black' stroke='white' stroke-linejoin='round'/%3E%3C/svg%3E") 1 1, default;
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --shadow-popover: 0 0 0 1px rgb(255 255 255 / 0.06), 0 8px 24px -4px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.35);
   --animate-pop: pop 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -81,7 +83,7 @@ select:focus-visible {
 }
 
 ::selection {
-  background: #6e56f866;
+  background: #007aff66;
 }
 
 ::-webkit-scrollbar {

@@ -108,7 +108,7 @@ class VectorPage {
     const node = page.nodes[id];
     if (!node || !node.visible) return;
     const opacity = inherited * node.opacity;
-    if (node.effects.some((e) => e.visible)) this.warnings.add("Drop shadows are not included in a vector PDF. Use Image mode to keep them.");
+    if (node.effects.some((e) => e.visible)) this.warnings.add("Shadows and blur effects are not included in a vector PDF. Use Image mode to keep them.");
     if (node.opacity < 1 && isContainer(node) && node.children.length > 1) {
       this.warnings.add("Layer opacity on a container is applied to each child separately, so overlapping children may look denser than on the canvas.");
     }

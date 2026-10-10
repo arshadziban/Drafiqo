@@ -43,12 +43,13 @@ function checkEffects(r: Reporter, value: unknown, path: string) {
     const p = `${path}[${i}]`;
     if (!isObj(effect)) return r.add(p, "expected an object");
     r.check(effect, p, "id", isStr, "a string");
-    r.check(effect, p, "type", (v) => v === "drop-shadow", '"drop-shadow"');
-    r.check(effect, p, "color", isColor, "a #rrggbb colour");
-    r.check(effect, p, "opacity", isUnit, "a number between 0 and 1");
-    for (const key of ["offsetX", "offsetY"]) r.check(effect, p, key, isNum, "a number");
+    r.check(effect, p, "type", oneOf(["drop-shadow", "inner-shadow", "layer-blur"]), '"drop-shadow", "inner-shadow" or "layer-blur"');
     r.check(effect, p, "blur", (v) => isNum(v) && v >= 0, "a non-negative number");
     r.check(effect, p, "visible", isBool, "a boolean");
+    if (effect.type === "layer-blur") return;
+    r.check(effect, p, "color", isColor, "a #rrggbb colour");
+    r.check(effect, p, "opacity", isUnit, "a number between 0 and 1");
+    for (const key of ["offsetX", "offsetY", "spread"]) r.check(effect, p, key, isNum, "a number");
   });
 }
 

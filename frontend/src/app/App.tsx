@@ -13,11 +13,12 @@ import { installShortcuts } from "./shortcuts";
 export function App() {
   const name = useEditor((s) => s.doc.name);
   const dirty = useEditor(isDirty);
+  const showLeft = useEditor((s) => s.showLeftSidebar);
 
   useEffect(() => installShortcuts(), []);
 
   useEffect(() => {
-    platform.setTitle(`${dirty ? "● " : ""}${name} — Drafiqo`);
+    platform.setTitle(`${dirty ? "● " : ""}${name}`);
   }, [name, dirty]);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function App() {
     <div className="flex h-full flex-col" onContextMenu={(e) => e.preventDefault()}>
       <Toolbar />
       <div className="flex min-h-0 flex-1">
-        <LeftSidebar />
+        {showLeft && <LeftSidebar />}
         <main className="relative min-w-0 flex-1">
           <Canvas />
           <ToolDock />
