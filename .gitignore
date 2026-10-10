@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+*.tsbuildinfo
+
+# Rust / Tauri build output and generated schemas
+src-tauri/target/
+src-tauri/gen/
+
+# Test output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+coverage/
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
