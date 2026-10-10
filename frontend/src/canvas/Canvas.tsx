@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { zoomAt } from "../editor/actions";
+import { placeImageFiles } from "../editor/images";
 import { currentPage, currentViewport, useEditor } from "../editor/store";
 import { ContextMenu } from "./ContextMenu";
 import { finishPen, isSpaceHeld, onContextMenu, onDoubleClick, onPointerDown, onPointerMove, onPointerUp, setSpaceHeld } from "./interactions";
@@ -25,25 +26,6 @@ function Grid({ x, y, zoom }: { x: number; y: number; zoom: number }) {
   );
 }
 
-const Key = ({ children }: { children: string }) => (
-  <kbd className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-sans text-[11px] font-medium text-white/85">{children}</kbd>
-);
-
-/** Shown on an empty page so the first step is obvious. */
-function EmptyHint() {
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3 rounded-xl bg-black/35 px-6 py-5 text-white/70 backdrop-blur-sm">
-        <span className="text-[13px] font-semibold text-white/90">This page is empty</span>
-        <span className="flex items-center gap-2">
-          <Key>F</Key> frame <Key>R</Key> rectangle <Key>T</Key> text <Key>P</Key> pen
-        </span>
-        <span className="text-white/50">Hold Space and drag to pan · pinch or Ctrl-scroll to zoom</span>
-      </div>
-    </div>
-  );
-}
-
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const background = useEditor((s) => currentPage(s).background);
@@ -54,6 +36,7 @@ export function Canvas() {
   const tool = useEditor((s) => s.tool);
   const showGrid = useEditor((s) => s.showGrid);
   const [panning, setPanning] = useState(false);
+  const [dropping, setDropping] = useState(false);
 
   // Track the canvas size and give each page a centred starting view.
   useEffect(() => {
@@ -131,7 +114,29 @@ export function Canvas() {
   const cursor = panning || tool === "hand" ? "grab" : tool === "select" ? "var(--cursor-app)" : tool === "text" ? "text" : "crosshair";
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden" style={{ background, cursor }} data-testid="canvas">
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden"
+      style={{ background, cursor }}
+      data-testid="canvas"
+      // Picture files dropped here are placed where they land.
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropping(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDropping(false);
+        const box = e.currentTarget.getBoundingClientRect();
+        void placeImageFiles([...e.dataTransfer.files], { x: e.clientX - box.left, y: e.clientY - box.top });
+      }}
+    >
       <svg
         className="absolute inset-0 h-full w-full touch-none"
         onPointerDown={onPointerDown}
@@ -149,10 +154,14 @@ export function Canvas() {
         </g>
         <Overlay />
       </svg>
-      {children.length === 0 && tool === "select" && <EmptyHint />}
       <TextEditor />
       <LabelEditor />
       <ContextMenu />
+      {dropping && (
+        <div data-testid="drop-hint" className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-accent/10">
+          <span className="rounded-md bg-ink-950/90 px-3 py-1.5 font-medium text-ink-100 shadow-lg">Drop to place image</span>
+        </div>
+      )}
     </div>
   );
 }

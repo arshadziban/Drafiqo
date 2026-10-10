@@ -15,6 +15,8 @@ import {
   type PolygonNode,
   type RectangleNode,
   type SectionNode,
+  type ImageScaleMode,
+  type ImagePaint,
   type SolidPaint,
   type StarNode,
   type TextNode,
@@ -35,6 +37,10 @@ export function createId(prefix = ""): string {
 
 export function solidPaint(color: string, opacity = 1): SolidPaint {
   return { id: createId("p"), type: "solid", color, opacity, visible: true };
+}
+
+export function imagePaint(assetId: string, scaleMode: ImageScaleMode = "fill"): ImagePaint {
+  return { id: createId("p"), type: "image", assetId, scaleMode, opacity: 1, visible: true };
 }
 
 export function dropShadow(): ShadowEffect {
@@ -218,5 +224,6 @@ export function createDocument(name = "Untitled"): DrafiqoDocument {
     createdAt: now,
     updatedAt: now,
     pages: [createPage("Page 1")],
+    assets: {},
   };
 }

@@ -4,7 +4,7 @@ A local-first desktop design editor for Windows and macOS, built with Tauri 2, R
 
 ## Status
 
-Built so far: the core editor, `.drafiqo` project files, and export (PNG, JPG and WebP at 1×–4× or a custom size, plus SVG and PDF). Autosave and crash recovery, auto layout, components, images and prototyping are not built yet.
+Built so far: the core editor, `.drafiqo` project files, images, and export (PNG, JPG and WebP at 1×–4× or a custom size, plus SVG and PDF). Autosave and crash recovery, auto layout, components and prototyping are not built yet.
 
 ## Running
 
@@ -45,6 +45,12 @@ cd src-tauri && cargo test        # file-writing tests
 Tool and layer-type icons live as SVG files in `assets/icons/`. After adding or changing one, run `npm run icons` to regenerate `frontend/src/icons/icons.tsx` (a test fails if they drift apart).
 
 To regenerate the desktop app icons after changing the logo: `npx tauri icon assets/branding/logo.svg`.
+
+## Images
+
+An image is a rectangle with an image fill, so it moves, resizes, rotates, takes corner radius and effects, and exports like any shape. Bring one in with **File ▸ Place image…** (Ctrl+Shift+K), by dragging files onto the canvas, by pasting from the clipboard, or from a fill's colour picker (**Image**). A picture placed over a frame goes inside it.
+
+PNG, JPG, WebP, GIF, SVG, AVIF and BMP are supported, up to 25 MB each; pictures larger than 4096 px on a side are scaled down. Pictures are embedded in the `.drafiqo` file, once each however often they are used, and ones nothing uses any more are dropped when saving. A vector PDF cannot carry pictures (it says so); use its Image mode.
 
 ## Project files
 

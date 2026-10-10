@@ -1,3 +1,4 @@
+import { pruneAssets } from "../document/assets";
 import { migrateDocument, ProjectFormatError } from "../document/migrate";
 import type { DrafiqoDocument } from "../document/types";
 import { validateDocument } from "../document/validate";
@@ -6,7 +7,7 @@ export const PROJECT_EXTENSION = "drafiqo";
 
 /** Serializes a document as the contents of a `.drafiqo` file. */
 export function serializeProject(doc: DrafiqoDocument, now = new Date()): string {
-  return JSON.stringify({ ...doc, updatedAt: now.toISOString() });
+  return JSON.stringify({ ...pruneAssets(doc), updatedAt: now.toISOString() });
 }
 
 /**

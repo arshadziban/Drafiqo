@@ -1,5 +1,6 @@
-import { Check, ChevronUp } from "lucide-react";
+import { Check, ChevronUp, Image as ImageIcon } from "lucide-react";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { placeImageFromPicker } from "../editor/images";
 import { useEditor, type Tool } from "../editor/store";
 import {
   IconEllipse,
@@ -18,7 +19,9 @@ import {
 import { formatShortcut, useDismiss } from "./ui";
 
 type ToolDef = { tool: Tool; label: string; key: string; icon: ComponentType<IconProps> };
-type ToolGroup = { name: string; tools: [ToolDef, ...ToolDef[]] };
+/** A command offered in a group's menu that does something instead of switching tool. */
+type ActionDef = { label: string; key: string; icon: ComponentType<IconProps>; action: () => void };
+type ToolGroup = { name: string; tools: [ToolDef, ...ToolDef[]]; actions?: ActionDef[] };
 
 /** Dock order. A group with several tools shows one of them and offers the rest in a flyout. */
 const GROUPS: ToolGroup[] = [
@@ -45,6 +48,7 @@ const GROUPS: ToolGroup[] = [
       { tool: "polygon", label: "Polygon", key: "Y", icon: IconPolygon },
       { tool: "star", label: "Star", key: "S", icon: IconStar },
     ],
+    actions: [{ label: "Image…", key: "Mod+Shift+K", icon: ImageIcon, action: () => void placeImageFromPicker() }],
   },
   { name: "pen", tools: [{ tool: "pen", label: "Pen", key: "P", icon: IconPen }] },
   { name: "text", tools: [{ tool: "text", label: "Text", key: "T", icon: IconText }] },
@@ -62,7 +66,7 @@ function DockGroup({ group, tool, setTool }: { group: ToolGroup; tool: Tool; set
   const ref = useDismiss(open, close);
   const active = current !== undefined;
   const Icon = shown.icon;
-  const hasMore = group.tools.length > 1;
+  const hasMore = group.tools.length > 1 || (group.actions?.length ?? 0) > 0;
 
   return (
     <div ref={ref} className="relative flex items-center">
@@ -117,6 +121,25 @@ function DockGroup({ group, tool, setTool }: { group: ToolGroup; tool: Tool; set
               <span className="flex-1">{t.label}</span>
               <span className="pl-4 text-ink-400 group-hover/item:text-white/80">{formatShortcut(t.key)}</span>
             </button>
+          ))}
+          {group.actions?.map((a) => (
+            <div key={a.label} role="none">
+              <div className="-mx-1 my-1 h-px bg-ink-700" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  close();
+                  a.action();
+                }}
+                className="group/item flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-left text-ink-100 hover:bg-accent hover:text-white"
+              >
+                <span className="w-3" />
+                <a.icon size={16} className="text-ink-300 group-hover/item:text-white" />
+                <span className="flex-1">{a.label}</span>
+                <span className="pl-4 text-ink-400 group-hover/item:text-white/80">{formatShortcut(a.key)}</span>
+              </button>
+            </div>
           ))}
         </div>
       )}

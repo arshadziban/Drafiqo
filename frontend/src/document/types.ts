@@ -1,7 +1,7 @@
 // The Drafiqo document model. Plain JSON-serializable data, independent of
 // React and of how the canvas is rendered.
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const FILE_FORMAT = "drafiqo";
 
 export type NodeId = string;
@@ -15,7 +15,32 @@ export interface SolidPaint {
   opacity: number;
   visible: boolean;
 }
-export type Paint = SolidPaint;
+
+export type ImageScaleMode = "fill" | "fit" | "stretch";
+
+/** A picture painted inside a shape. The pixels live in the document's `assets`. */
+export interface ImagePaint {
+  id: string;
+  type: "image";
+  assetId: string;
+  /** fill: covers the shape, cropping the overflow. fit: whole picture inside. stretch: distorts to the shape. */
+  scaleMode: ImageScaleMode;
+  opacity: number;
+  visible: boolean;
+}
+
+export type Paint = SolidPaint | ImagePaint;
+
+/** An embedded picture, stored once however many shapes use it. */
+export interface ImageAsset {
+  id: string;
+  name: string;
+  mime: string;
+  width: number;
+  height: number;
+  /** The file's bytes as a data: URL. */
+  url: string;
+}
 
 /** A shadow cast behind the layer, or one painted inside its edges. */
 export interface ShadowEffect {
@@ -62,7 +87,7 @@ export interface BaseNode {
   visible: boolean;
   locked: boolean;
   fills: Paint[];
-  strokes: Paint[];
+  strokes: SolidPaint[];
   strokeWidth: number;
   effects: Effect[];
 }
@@ -117,6 +142,8 @@ export type TextAutoResize = "auto" | "height" | "fixed";
 
 export interface TextNode extends BaseNode {
   type: "text";
+  /** Glyphs are painted with a colour, so text has no image fills. */
+  fills: SolidPaint[];
   text: string;
   fontFamily: string;
   fontSize: number;
@@ -179,6 +206,8 @@ export interface DrafiqoDocument {
   createdAt: string;
   updatedAt: string;
   pages: Page[];
+  /** Pictures used by image fills, keyed by id. */
+  assets: Record<string, ImageAsset>;
 }
 
 export const NODE_TYPES: readonly NodeType[] = [

@@ -95,7 +95,7 @@ function ChannelInput({ label, title, value, min, max, onCommit }: { label: stri
 
 type Mode = "hex" | "rgb" | "hsb";
 
-export function ColorPicker({ anchor, value, label, onChange, onClose }: { anchor: HTMLElement; value: string; label: string; onChange: (hex: string) => void; onClose: () => void }) {
+export function ColorPicker({ anchor, value, label, onChange, onClose, onPickImage }: { anchor: HTMLElement; value: string; label: string; onChange: (hex: string) => void; onClose: () => void; onPickImage?: () => void }) {
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const [mode, setMode] = useState<Mode>("hex");
@@ -267,6 +267,25 @@ export function ColorPicker({ anchor, value, label, onChange, onClose }: { ancho
       </header>
 
       <div className="flex flex-col gap-3 p-3">
+        {onPickImage && (
+          // A fill is either a colour or a picture: choosing Image closes the picker and asks for the file.
+          <div role="group" aria-label="Fill type" className="flex rounded-lg bg-ink-800 p-0.5">
+            <button type="button" aria-pressed className="h-6 flex-1 rounded-md bg-ink-600 font-medium text-white shadow-sm shadow-black/30">
+              Color
+            </button>
+            <button
+              type="button"
+              aria-pressed={false}
+              onClick={() => {
+                onClose();
+                onPickImage();
+              }}
+              className="h-6 flex-1 rounded-md font-medium text-ink-300 transition-colors duration-100 hover:text-ink-100"
+            >
+              Image
+            </button>
+          </div>
+        )}
         <div
           role="slider"
           tabIndex={0}

@@ -18,6 +18,8 @@ interface CanvasUiState {
   /** The frame or section whose name is being edited on the canvas label. */
   labelEditId: NodeId | null;
   exportOpen: boolean;
+  /** A short confirmation shown at the top of the window, e.g. after an export. */
+  toast: { id: number; title: string; detail?: string; warnings?: string[] } | null;
 }
 
 export const useCanvasUi = create<CanvasUiState>()(() => ({
@@ -29,4 +31,5 @@ export const useCanvasUi = create<CanvasUiState>()(() => ({
   renamingId: null,
   labelEditId: null,
   exportOpen: false,
+  toast: null,
 }));

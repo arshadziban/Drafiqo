@@ -4,6 +4,7 @@ import { ExportDialog } from "../components/ExportDialog";
 import { LeftSidebar } from "../components/LeftSidebar";
 import { PropertiesPanel } from "../components/PropertiesPanel";
 import { ToolDock } from "../components/ToolDock";
+import { Toast } from "../components/Toast";
 import { Toolbar } from "../components/Toolbar";
 import { TooltipLayer } from "../components/TooltipLayer";
 import { isDirty, useEditor } from "../editor/store";
@@ -17,6 +18,19 @@ export function App() {
   const showLeft = useEditor((s) => s.showLeftSidebar);
 
   useEffect(() => installShortcuts(), []);
+
+  // A file dropped anywhere else would otherwise make the window navigate to it.
+  useEffect(() => {
+    const keep = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    window.addEventListener("dragover", keep);
+    window.addEventListener("drop", keep);
+    return () => {
+      window.removeEventListener("dragover", keep);
+      window.removeEventListener("drop", keep);
+    };
+  }, []);
 
   useEffect(() => {
     platform.setTitle(`${dirty ? "● " : ""}${name}`);
@@ -42,6 +56,7 @@ export function App() {
       </div>
       <ExportDialog />
       <TooltipLayer />
+      <Toast />
     </div>
   );
 }

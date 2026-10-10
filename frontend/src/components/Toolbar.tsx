@@ -27,6 +27,7 @@ import {
   zoomTo,
   zoomToFit,
 } from "../editor/actions";
+import { placeImageFromPicker } from "../editor/images";
 import { currentViewport, isDirty, useEditor } from "../editor/store";
 import { IconSidebarRight } from "../icons/icons";
 import { newProject, openProject, openRecentProject, renameProject, saveProject, saveProjectAs } from "../storage/fileActions";
@@ -65,6 +66,8 @@ function fileMenu(): MenuEntry[] {
   const items: MenuEntry[] = [
     { label: "New project", shortcut: "Mod+N", action: () => void newProject() },
     { label: "Open…", shortcut: "Mod+O", action: () => void openProject() },
+    "separator",
+    { label: "Place image…", shortcut: "Mod+Shift+K", action: () => void placeImageFromPicker() },
     "separator",
     { label: "Save", shortcut: "Mod+S", action: () => void saveProject() },
     { label: "Save as…", shortcut: "Mod+Shift+S", action: () => void saveProjectAs() },

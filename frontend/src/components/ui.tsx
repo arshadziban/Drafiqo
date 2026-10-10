@@ -187,7 +187,7 @@ export function NumberField({
  * Colour swatch + hex field. The swatch opens the colour picker popover; the
  * hex field accepts typed values. Picker gestures are grouped into one undo step.
  */
-export function ColorField({ value, onChange, label }: { value: string | Mixed; onChange: (color: string) => void; label: string }) {
+export function ColorField({ value, onChange, label, onPickImage }: { value: string | Mixed; onChange: (color: string) => void; label: string; onPickImage?: () => void }) {
   const swatchRef = useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -211,7 +211,7 @@ export function ColorField({ value, onChange, label }: { value: string | Mixed; 
         className="h-4 w-4 shrink-0 rounded-[3px] ring-1 ring-white/20 transition-shadow duration-100 hover:ring-white/50"
         style={{ background: value === "mixed" ? "repeating-conic-gradient(#42464e 0% 25%, #868b95 0% 50%) 50% / 6px 6px" : value }}
       />
-      {open && swatchRef.current && <ColorPicker anchor={swatchRef.current} value={value === "mixed" ? "#000000" : value} label={label} onChange={onChange} onClose={close} />}
+      {open && swatchRef.current && <ColorPicker anchor={swatchRef.current} value={value === "mixed" ? "#000000" : value} label={label} onChange={onChange} onClose={close} onPickImage={onPickImage} />}
       <input
         aria-label={`${label} hex`}
         className="w-full min-w-0 bg-transparent text-ink-100 uppercase outline-none"

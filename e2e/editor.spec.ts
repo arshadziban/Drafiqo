@@ -204,7 +204,7 @@ test("saves a .drafiqo project and reopens it with everything still editable", a
   const path = await download.path();
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved.format).toBe("drafiqo");
-  expect(saved.schemaVersion).toBe(2);
+  expect(saved.schemaVersion).toBe(3);
   expect(Object.keys(saved.pages[0].nodes)).toHaveLength(3);
 
   // Start over, then open the file that was just written.

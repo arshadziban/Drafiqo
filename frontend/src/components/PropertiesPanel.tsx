@@ -22,9 +22,11 @@ import { fontStack } from "../canvas/renderNode";
 import { convertEffect } from "../document/effects";
 import { dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
 import { getPage } from "../document/tree";
-import type { Effect, EffectType, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
+import { getAsset } from "../document/assets";
+import type { Effect, EffectType, ImagePaint, ImageScaleMode, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, SolidPaint, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
 import { FRAME_PRESETS, alignSelection, distributeSelection, insertFramePreset } from "../editor/actions";
 import { patchNodes, resizeNode, type NodePatch } from "../editor/commands";
+import { chooseImageForFill } from "../editor/images";
 import { currentPage, useEditor } from "../editor/store";
 import { openExportDialog } from "./openExportDialog";
 import { ColorField, IconButton, MenuList, NumberField, Section, Select, shared, useDismiss, type Mixed } from "./ui";
@@ -222,21 +224,63 @@ function TextSection({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
   );
 }
 
+const SCALE_MODES: { value: ImageScaleMode; label: string }[] = [
+  { value: "fill", label: "Fill" },
+  { value: "fit", label: "Fit" },
+  { value: "stretch", label: "Stretch" },
+];
+
+/** A fill that is a picture: its thumbnail replaces it on click, and a mode says how it sits in the shape. */
+function ImageFillRow({ paint, ids, update, remove }: { paint: ImagePaint; ids: NodeId[]; update: (patch: Partial<ImagePaint>) => void; remove: () => void }) {
+  const asset = getAsset(paint.assetId);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="Replace image"
+          data-tip="Replace image"
+          onClick={() => void chooseImageForFill(ids, paint.id)}
+          className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md border border-transparent bg-ink-800 px-1.5 text-left transition-colors duration-100 hover:border-ink-600"
+        >
+          {asset ? <img src={asset.url} alt="" className="h-4 w-4 shrink-0 rounded-[3px] object-cover ring-1 ring-white/20" /> : <span className="h-4 w-4 shrink-0 rounded-[3px] bg-ink-600" />}
+          <span className="min-w-0 truncate text-ink-100">{asset?.name ?? "Missing image"}</span>
+        </button>
+        <div className="w-16 shrink-0">
+          <NumberField label="" title="Image opacity" suffix="%" min={0} max={100} value={Math.round(paint.opacity * 100)} onChange={(o) => update({ opacity: o / 100 })} />
+        </div>
+        <IconButton label={paint.visible ? "Hide" : "Show"} onClick={() => update({ visible: !paint.visible })}>
+          {paint.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+        </IconButton>
+        <IconButton label="Remove fill" onClick={remove}>
+          <Minus size={13} />
+        </IconButton>
+      </div>
+      <Select<ImageScaleMode> label="Image scale mode" value={paint.scaleMode} options={SCALE_MODES} onChange={(scaleMode) => update({ scaleMode })} />
+    </div>
+  );
+}
+
 function PaintList({
   title,
   paints,
+  ids,
   onChange,
   defaultColor,
+  allowImage = false,
   children,
 }: {
   title: string;
   paints: Paint[] | Mixed;
+  ids: NodeId[];
   onChange: (paints: Paint[]) => void;
   defaultColor: string;
+  /** Fills can be pictures; strokes cannot. */
+  allowImage?: boolean;
   children?: React.ReactNode;
 }) {
   const list = paints === "mixed" ? [] : paints;
-  const update = (id: string, patch: Partial<Paint>) => onChange(list.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  const update = (id: string, patch: Partial<SolidPaint> | Partial<ImagePaint>) => onChange(list.map((p) => (p.id === id ? ({ ...p, ...patch } as Paint) : p)));
   return (
     <Section
       title={title}
@@ -247,20 +291,24 @@ function PaintList({
       }
     >
       {paints === "mixed" && <p className="text-ink-400">Mixed — add one to replace them all.</p>}
-      {list.map((paint) => (
-        <div key={paint.id} className="flex items-center gap-1.5">
-          <ColorField label={title} value={paint.color} onChange={(color) => update(paint.id, { color })} />
-          <div className="w-16 shrink-0">
-            <NumberField label="" title={`${title} opacity`} suffix="%" min={0} max={100} value={Math.round(paint.opacity * 100)} onChange={(o) => update(paint.id, { opacity: o / 100 })} />
+      {list.map((paint) =>
+        paint.type === "image" ? (
+          <ImageFillRow key={paint.id} paint={paint} ids={ids} update={(patch) => update(paint.id, patch)} remove={() => onChange(list.filter((p) => p.id !== paint.id))} />
+        ) : (
+          <div key={paint.id} className="flex items-center gap-1.5">
+            <ColorField label={title} value={paint.color} onChange={(color) => update(paint.id, { color })} onPickImage={allowImage ? () => void chooseImageForFill(ids, paint.id) : undefined} />
+            <div className="w-16 shrink-0">
+              <NumberField label="" title={`${title} opacity`} suffix="%" min={0} max={100} value={Math.round(paint.opacity * 100)} onChange={(o) => update(paint.id, { opacity: o / 100 })} />
+            </div>
+            <IconButton label={paint.visible ? "Hide" : "Show"} onClick={() => update(paint.id, { visible: !paint.visible })}>
+              {paint.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+            </IconButton>
+            <IconButton label={`Remove ${title.toLowerCase()}`} onClick={() => onChange(list.filter((p) => p.id !== paint.id))}>
+              <Minus size={13} />
+            </IconButton>
           </div>
-          <IconButton label={paint.visible ? "Hide" : "Show"} onClick={() => update(paint.id, { visible: !paint.visible })}>
-            {paint.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-          </IconButton>
-          <IconButton label={`Remove ${title.toLowerCase()}`} onClick={() => onChange(list.filter((p) => p.id !== paint.id))}>
-            <Minus size={13} />
-          </IconButton>
-        </div>
-      ))}
+        ),
+      )}
       {list.length > 0 && children}
     </Section>
   );
@@ -421,12 +469,15 @@ export function PropertiesPanel() {
             <PaintList
               title={type === "frame" ? "Background" : "Fill"}
               paints={shared(nodes, (n) => n.fills)}
+              ids={ids}
               defaultColor="#d9d9d9"
+              // Text is painted with a colour; every other shape can be filled with a picture.
+              allowImage={nodes.every((n) => n.type !== "text")}
               onChange={(fills) => edit(ids, { fills })}
             />
           )}
           {showStroke && (
-            <PaintList title="Stroke" paints={shared(nodes, (n) => n.strokes)} defaultColor="#000000" onChange={(strokes) => edit(ids, { strokes })}>
+            <PaintList title="Stroke" paints={shared(nodes, (n) => n.strokes)} ids={ids} defaultColor="#000000" onChange={(strokes) => edit(ids, { strokes: strokes.filter((paint): paint is SolidPaint => paint.type === "solid") })}>
               <div className="grid grid-cols-2 gap-2">
                 <NumberField label="Width" title="Stroke width" min={0} step={0.5} value={shared(nodes, (n) => n.strokeWidth)} onChange={(strokeWidth) => edit(ids, { strokeWidth })} />
                 {nodes.every((n) => n.type === "line" || n.type === "vector") && (

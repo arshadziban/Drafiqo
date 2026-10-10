@@ -1,7 +1,8 @@
-import { FolderOpen, Link2, Link2Off, TriangleAlert, X } from "lucide-react";
+import { Download, FolderOpen, Info, Link2, Link2Off, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useCanvasUi } from "../canvas/uiStore";
 import { currentPage, useEditor } from "../editor/store";
+import { shortenPath } from "../export/displayPath";
 import { editHeight, editWidth, effectiveScale, initialRasterSize, proportionsDiffer, selectScale, setAspectLock } from "../export/exportDimensions";
 import { renderExport } from "../export/exportDocument";
 import { listExportTargets, renderSvg, sourceBounds } from "../export/exportRenderer";
@@ -45,15 +46,15 @@ function Segmented<T extends string | number>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex rounded-md bg-ink-800 p-0.5">
+    <div role="group" aria-label={label} className="flex rounded-lg bg-ink-850 p-0.5 ring-1 ring-inset ring-white/5">
       {options.map((option) => (
         <button
           key={String(option.value)}
           type="button"
           aria-pressed={option.value === value}
           onClick={() => onChange(option.value)}
-          className={`h-6 flex-1 rounded-[5px] px-2 font-medium transition-colors duration-100 ${
-            option.value === value ? "bg-ink-600 text-white shadow-sm shadow-black/30" : "text-ink-300 hover:text-ink-100"
+          className={`h-6 flex-1 rounded-md px-2 font-medium transition-colors duration-100 ${
+            option.value === value ? "bg-ink-600 text-white shadow-sm shadow-black/30" : "text-ink-300 hover:bg-white/5 hover:text-ink-100"
           }`}
         >
           {option.label}
@@ -63,12 +64,32 @@ function Segmented<T extends string | number>({
   );
 }
 
+/** A group of related settings with a small heading, separated from the one above by a line. */
+function Section({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 border-t border-ink-700 px-5 py-4 first:border-t-0">
+      {title && <h3 className="text-[10.5px] font-semibold tracking-wider text-ink-400 uppercase">{title}</h3>}
+      {children}
+    </section>
+  );
+}
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid grid-cols-[92px_1fr] items-start gap-3">
+    <div className="grid grid-cols-[84px_1fr] items-start gap-3">
       <span className="pt-1.5 text-ink-400">{label}</span>
       <div className="flex min-w-0 flex-col gap-2">{children}</div>
     </div>
+  );
+}
+
+/** An explanation or caution under a control. */
+function Hint({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-md bg-ink-850 px-2.5 py-2 leading-snug text-ink-300 ring-1 ring-inset ring-white/5">
+      <Info size={13} className="mt-0.5 shrink-0 text-ink-400" />
+      <span>{children}</span>
+    </p>
   );
 }
 
@@ -92,29 +113,38 @@ function PixelField({ label, short, value, onChange }: { label: string; short: s
   );
 }
 
+/** A switch. The real checkbox sits invisibly over it, so clicks, the keyboard and screen readers all work. */
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="flex h-7 items-center gap-2 text-ink-100">
-      <input type="checkbox" className="h-3.5 w-3.5 accent-accent" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <label className="relative flex h-7 w-fit items-center gap-2.5 text-ink-100">
+      <input type="checkbox" className="peer absolute top-1/2 left-0 z-10 h-4 w-7 -translate-y-1/2 cursor-default opacity-0" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span
+        aria-hidden
+        className="relative h-4 w-7 shrink-0 rounded-full bg-ink-600 shadow-inner shadow-black/30 transition-colors duration-150 peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-checked:[&>span]:translate-x-3"
+      >
+        <span className="absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow-sm shadow-black/40 transition-transform duration-150" />
+      </span>
       {label}
     </label>
   );
 }
 
 function QualitySlider({ value, onChange, disabled }: { value: number; onChange: (value: number) => void; disabled?: boolean }) {
+  const percent = Math.round(value * 100);
   return (
-    <div className={`flex h-7 items-center gap-3 ${disabled ? "opacity-40" : ""}`}>
+    <div className={`flex h-7 items-center gap-3 transition-opacity ${disabled ? "opacity-40" : ""}`}>
       <input
         type="range"
         aria-label="Quality"
         min={1}
         max={100}
         disabled={disabled}
-        value={Math.round(value * 100)}
+        value={percent}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
-        className="h-1 flex-1 accent-accent"
+        className="range flex-1"
+        style={{ ["--fill" as string]: `${((percent - 1) / 99) * 100}%` }}
       />
-      <span className="w-9 text-right text-ink-100 tabular-nums">{Math.round(value * 100)}%</span>
+      <span className="w-9 text-right text-ink-100 tabular-nums">{percent}%</span>
     </div>
   );
 }
@@ -122,7 +152,6 @@ function QualitySlider({ value, onChange, disabled }: { value: number; onChange:
 type Status =
   | { kind: "idle" }
   | { kind: "working" }
-  | { kind: "done"; message: string; warnings: string[] }
   | { kind: "error"; message: string };
 
 function Dialog({ onClose }: { onClose: () => void }) {
@@ -232,7 +261,12 @@ function Dialog({ onClose }: { onClose: () => void }) {
         written = await platform.writeExport({ ...file, overwrite: true });
       }
       const dimensions = raster ? `${result.width} × ${result.height} px` : `${result.width} × ${result.height}`;
-      setStatus({ kind: "done", message: `Exported ${file.name} (${dimensions}) to ${written.location}`, warnings: result.warnings });
+      // Done: close, and confirm where the file went. Anything the export had to leave out
+      // (for example, what a vector PDF cannot carry) is listed in the toast, which then stays until dismissed.
+      useCanvasUi.setState({
+        toast: { id: Date.now(), title: `Exported ${file.name}`, detail: `${dimensions} · ${shortenPath(written.location, 56)}`, warnings: result.warnings },
+      });
+      onClose();
     } catch (error) {
       setStatus({ kind: "error", message: describe(error) });
     }
@@ -240,39 +274,48 @@ function Dialog({ onClose }: { onClose: () => void }) {
 
   const scaleOptions: { value: ScaleMode; label: string }[] = [...SCALE_PRESETS.map((s) => ({ value: s as ScaleMode, label: `${s}×` })), { value: "custom", label: "Custom" }];
   const scale = effectiveScale(outputSize, source);
+  const working = status.kind === "working";
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-[2px]"
       onPointerDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div role="dialog" aria-modal aria-label="Export" className="flex max-h-[92vh] w-[820px] max-w-[96vw] animate-pop flex-col overflow-hidden rounded-xl bg-ink-900 shadow-popover">
-        <header className="flex h-11 shrink-0 items-center justify-between border-b border-ink-700 pr-2 pl-4">
-          <h2 className="text-[13px] font-semibold text-ink-100">Export</h2>
+      <div role="dialog" aria-modal aria-label="Export" className="flex max-h-[92vh] w-[820px] max-w-[96vw] animate-pop flex-col overflow-hidden rounded-xl bg-ink-900 shadow-popover ring-1 ring-white/[0.07]">
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-ink-700 pr-2.5 pl-5">
+          <h2 className="flex min-w-0 items-baseline gap-2 text-[13px] font-semibold text-ink-100">
+            Export
+            {target && <span className="truncate text-[12px] font-normal text-ink-400">{target.label}</span>}
+          </h2>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 hover:bg-ink-700 hover:text-ink-100">
             <X size={15} />
           </button>
         </header>
 
-        <div className="flex min-h-0 flex-1">
+        {/* A fixed height keeps the dialog from jumping as formats with fewer or more options are chosen. */}
+        <div className="flex h-[580px] max-h-[calc(92vh-7.5rem)] min-h-0">
           {/* Preview */}
           <div className="flex w-[300px] shrink-0 flex-col border-r border-ink-700 bg-ink-950">
+            <div className="flex items-center justify-between px-5 pt-4">
+              <span className="text-[10.5px] font-semibold tracking-wider text-ink-400 uppercase">Preview</span>
+              <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-300">{info.label}</span>
+            </div>
             <div
-              className="m-4 flex flex-1 items-center justify-center overflow-hidden rounded-lg p-3"
+              className="mx-5 mt-3 flex flex-1 items-center justify-center overflow-hidden rounded-lg p-4 ring-1 ring-inset ring-white/5"
               style={{
                 minHeight: 240,
-                backgroundColor: "#2a2c31",
-                backgroundImage: "repeating-conic-gradient(#33363c 0% 25%, transparent 0% 50%)",
-                backgroundSize: "16px 16px",
+                backgroundColor: "#202226",
+                backgroundImage: "repeating-conic-gradient(#2a2d32 0% 25%, transparent 0% 50%)",
+                backgroundSize: "12px 12px",
               }}
             >
               {preview ? (
-                <img src={preview} alt="Export preview" className="max-h-[300px] max-w-full object-contain shadow-lg shadow-black/40" />
+                <img src={preview} alt="Export preview" className="max-h-[300px] max-w-full rounded-[3px] object-contain shadow-lg shadow-black/50 ring-1 ring-black/30" />
               ) : (
                 <span className="text-ink-400">No preview</span>
               )}
             </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 pb-4">
+            <dl className="mx-5 mt-4 mb-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 border-t border-ink-700 pt-3">
               <dt className="text-ink-400">Source</dt>
               <dd className="text-right text-ink-300 tabular-nums">
                 {source.width} × {source.height} px
@@ -291,25 +334,26 @@ function Dialog({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Settings */}
-          <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-            <Row label="Export target">
-              <Select
-                label="Export target"
-                value={target?.key ?? ""}
-                options={targets.map((t) => ({ value: t.key, label: t.label }))}
-                onChange={edit((key: string) => {
-                  setTargetKey(key);
-                  setCustomName(null);
-                })}
-              />
-            </Row>
-
-            <Row label="Format">
-              <Segmented label="Format" value={format} options={FORMATS.map((f) => ({ value: f, label: FORMAT_INFO[f].label }))} onChange={edit(setFormat)} />
-            </Row>
+          <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+            <Section>
+              <Row label="Target">
+                <Select
+                  label="Export target"
+                  value={target?.key ?? ""}
+                  options={targets.map((t) => ({ value: t.key, label: t.label }))}
+                  onChange={edit((key: string) => {
+                    setTargetKey(key);
+                    setCustomName(null);
+                  })}
+                />
+              </Row>
+              <Row label="Format">
+                <Segmented label="Format" value={format} options={FORMATS.map((f) => ({ value: f, label: FORMAT_INFO[f].label }))} onChange={edit(setFormat)} />
+              </Row>
+            </Section>
 
             {raster && (
-              <>
+              <Section title="Size">
                 <Row label="Scale">
                   <Segmented label="Scale" value={size.scale} options={scaleOptions} onChange={(s) => updateSize(selectScale(size, source, s))} />
                 </Row>
@@ -333,7 +377,7 @@ function Dialog({ onClose }: { onClose: () => void }) {
                   {size.scale === "custom" && <span className="text-ink-400">Custom size{size.lockAspect ? ", proportions locked to the artwork" : ""}.</span>}
                   {mismatch && (
                     <>
-                      <span className="text-ink-300">These proportions differ from the artwork. Choose how it should fit:</span>
+                      <Hint>These proportions differ from the artwork. Choose how it should fit:</Hint>
                       <Segmented<FitMode>
                         label="Fit"
                         value={fit}
@@ -347,12 +391,12 @@ function Dialog({ onClose }: { onClose: () => void }) {
                     </>
                   )}
                 </Row>
-              </>
+              </Section>
             )}
 
-            <Row label={`${info.label} settings`}>
+            <Section title={`${info.label} options`}>
               {format === "pdf" && (
-                <>
+                <Row label="Content">
                   <Segmented<PdfMode>
                     label="PDF content"
                     value={pdfMode}
@@ -362,101 +406,90 @@ function Dialog({ onClose }: { onClose: () => void }) {
                     ]}
                     onChange={edit(setPdfMode)}
                   />
-                  <span className="text-ink-400">
+                  <Hint>
                     {pdfMode === "vector"
-                      ? "Shapes and text stay vector. Text uses standard PDF fonts and drop shadows are left out."
+                      ? "Shapes and text stay vector. Text uses standard PDF fonts and shadows and blur effects are left out."
                       : "Embeds a 2× picture of the artwork: exact appearance, but not editable vectors."}
-                  </span>
-                </>
-              )}
-              {format !== "jpg" && (
-                <Toggle label={format === "pdf" || format === "svg" ? "No background" : "Transparent background"} checked={transparent} onChange={edit(setTransparent)} />
-              )}
-              {(format === "jpg" || !transparent) && (
-                <div className="flex items-center gap-2">
-                  <span className="w-20 shrink-0 text-ink-400">Background</span>
-                  <ColorField label="Export background" value={background} onChange={edit(setBackground)} />
-                </div>
+                  </Hint>
+                </Row>
               )}
               {format === "jpg" && (
-                <>
+                <Row label="Quality">
                   <QualitySlider value={jpgQuality} onChange={edit(setJpgQuality)} />
-                  <span className="text-ink-400">JPG has no transparency; empty areas use the background colour.</span>
-                </>
+                </Row>
               )}
               {format === "webp" && (
-                <>
+                <Row label="Quality">
                   <QualitySlider value={webpQuality} onChange={edit(setWebpQuality)} disabled={lossless} />
                   <Toggle label="Lossless" checked={lossless} onChange={edit(setLossless)} />
-                  <span className="text-ink-400">Quality 100% is still lossy compression. Turn on Lossless for pixel-exact output (larger files).</span>
-                </>
+                  <Hint>Quality 100% is still lossy compression. Turn on Lossless for pixel-exact output (larger files).</Hint>
+                </Row>
               )}
-            </Row>
+              <Row label="Background">
+                {format !== "jpg" && (
+                  <Toggle label={format === "pdf" || format === "svg" ? "No background" : "Transparent background"} checked={transparent} onChange={edit(setTransparent)} />
+                )}
+                {(format === "jpg" || !transparent) && <ColorField label="Export background" value={background} onChange={edit(setBackground)} />}
+                {format === "jpg" && <Hint>JPG has no transparency; empty areas use the background colour.</Hint>}
+              </Row>
+            </Section>
 
-            <Row label="Destination">
-              <div className="flex items-center gap-1.5">
-                <label className="flex h-7 min-w-0 flex-1 items-center rounded-md border border-transparent bg-ink-800 px-2 transition-colors duration-100 focus-within:border-accent focus-within:bg-ink-950 hover:border-ink-600">
-                  <input
-                    aria-label="File name"
-                    className="w-full min-w-0 bg-transparent text-ink-100 outline-none"
-                    value={fileName}
-                    onChange={(e) => edit(setCustomName)(e.target.value)}
-                  />
-                </label>
-                <span className="flex h-7 shrink-0 items-center rounded-md bg-ink-800 px-2 text-ink-300" data-testid="export-extension">
-                  .{info.extension}
-                </span>
-              </div>
-              {platform.canChooseFolder ? (
-                <div className="flex items-center gap-1.5">
-                  <span className="flex h-7 min-w-0 flex-1 items-center truncate rounded-md bg-ink-800 px-2 text-ink-300" data-tip={folder ?? undefined}>
-                    {folder ?? "No folder chosen"}
+            <Section title="Save to">
+              <Row label="File name">
+                <div className="flex h-7 items-center rounded-md border border-transparent bg-ink-800 transition-colors duration-100 focus-within:border-accent focus-within:bg-ink-950 hover:border-ink-600">
+                  <input aria-label="File name" className="h-full min-w-0 flex-1 bg-transparent pr-1 pl-2 text-ink-100 outline-none" value={fileName} onChange={(e) => edit(setCustomName)(e.target.value)} />
+                  <span className="mr-1 shrink-0 rounded bg-ink-700 px-1.5 py-0.5 text-[11px] font-medium text-ink-300" data-testid="export-extension">
+                    .{info.extension}
                   </span>
-                  <button type="button" onClick={() => void pickFolder()} className="flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-ink-700 px-2.5 font-medium text-ink-100 hover:bg-ink-600">
-                    <FolderOpen size={13} />
-                    Choose folder
-                  </button>
                 </div>
-              ) : (
-                <span className="text-ink-400">Saved to your browser's download folder.</span>
-              )}
-            </Row>
+              </Row>
+              <Row label="Folder">
+                {platform.canChooseFolder ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md bg-ink-850 px-2.5 text-ink-300 ring-1 ring-inset ring-white/5" data-tip={folder ?? undefined}>
+                      <FolderOpen size={13} className="shrink-0 text-ink-400" />
+                      <span className="min-w-0 truncate">{folder ? shortenPath(folder, 44) : "No folder chosen"}</span>
+                    </div>
+                    <button type="button" onClick={() => void pickFolder()} className="flex h-7 shrink-0 items-center rounded-md bg-ink-700 px-3 font-medium text-ink-100 transition-colors duration-100 hover:bg-ink-600">
+                      {folder ? "Change" : "Choose folder"}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="flex h-7 items-center gap-2 text-ink-300">
+                    <Download size={13} className="shrink-0 text-ink-400" />
+                    Saved to your browser's download folder.
+                  </span>
+                )}
+              </Row>
+            </Section>
           </div>
         </div>
 
-        <footer className="flex min-h-13 shrink-0 items-center gap-3 border-t border-ink-700 px-4 py-2.5">
+        <footer className="flex min-h-14 shrink-0 items-center gap-3 border-t border-ink-700 bg-ink-900 px-5 py-3">
           <div className="min-w-0 flex-1" role="status" data-testid="export-status">
             {status.kind === "error" ? (
-              <p className="flex items-start gap-1.5 whitespace-pre-line text-red-300">
-                <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+              <p className="flex items-start gap-2 whitespace-pre-line text-red-300">
+                <TriangleAlert size={15} className="mt-px shrink-0" />
                 {status.message}
               </p>
             ) : errors.length > 0 ? (
-              <p className="flex items-start gap-1.5 whitespace-pre-line text-amber-300">
-                <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+              <p className="flex items-start gap-2 whitespace-pre-line text-amber-300">
+                <TriangleAlert size={15} className="mt-px shrink-0" />
                 {errors.join("\n")}
               </p>
-            ) : status.kind === "done" ? (
-              <div className="flex flex-col gap-0.5">
-                <p className="break-words text-emerald-300">{status.message}</p>
-                {status.warnings.map((w) => (
-                  <p key={w} className="text-ink-400">
-                    {w}
-                  </p>
-                ))}
-              </div>
             ) : null}
           </div>
-          <button type="button" onClick={onClose} className="h-8 shrink-0 rounded-md px-3 font-medium text-ink-300 hover:bg-ink-700 hover:text-ink-100">
-            {status.kind === "done" ? "Done" : "Cancel"}
+          <button type="button" onClick={onClose} className="h-8 shrink-0 rounded-md px-3.5 font-medium text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100">
+            Cancel
           </button>
           <button
             type="button"
-            disabled={errors.length > 0 || status.kind === "working"}
+            disabled={errors.length > 0 || working}
             onClick={() => void run()}
-            className="h-8 shrink-0 rounded-md bg-accent px-4 font-semibold text-white transition-colors duration-100 hover:bg-accent-hover disabled:bg-ink-700 disabled:text-ink-400"
+            className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-accent px-4 font-semibold text-white transition-colors duration-100 hover:bg-accent-hover disabled:bg-ink-700 disabled:text-ink-400"
           >
-            {status.kind === "working" ? "Exporting…" : `Export ${info.label}`}
+            {working ? <LoaderCircle size={14} className="animate-spin" /> : <Download size={14} />}
+            {working ? "Exporting…" : `Export ${info.label}`}
           </button>
         </footer>
       </div>

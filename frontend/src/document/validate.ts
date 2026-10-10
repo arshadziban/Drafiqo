@@ -24,17 +24,38 @@ class Reporter {
   }
 }
 
-function checkPaints(r: Reporter, value: unknown, path: string) {
+function checkPaints(r: Reporter, value: unknown, path: string, allowImage = false) {
   if (!Array.isArray(value)) return r.add(path, "expected an array");
   value.forEach((paint, i) => {
     const p = `${path}[${i}]`;
     if (!isObj(paint)) return r.add(p, "expected an object");
     r.check(paint, p, "id", isStr, "a string");
-    r.check(paint, p, "type", (v) => v === "solid", '"solid"');
-    r.check(paint, p, "color", isColor, "a #rrggbb colour");
+    r.check(paint, p, "type", oneOf(allowImage ? ["solid", "image"] : ["solid"]), allowImage ? '"solid" or "image"' : '"solid"');
     r.check(paint, p, "opacity", isUnit, "a number between 0 and 1");
     r.check(paint, p, "visible", isBool, "a boolean");
+    if (paint.type === "image") {
+      r.check(paint, p, "assetId", isStr, "a string");
+      r.check(paint, p, "scaleMode", oneOf(["fill", "fit", "stretch"]), '"fill", "fit" or "stretch"');
+    } else {
+      r.check(paint, p, "color", isColor, "a #rrggbb colour");
+    }
   });
+}
+
+/** Image types an asset may have. SVG pictures are shown through <image>, which never runs scripts. */
+export const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml", "image/avif", "image/bmp"] as const;
+
+function checkAssets(r: Reporter, value: unknown) {
+  if (!isObj(value)) return r.add("document.assets", "expected an object");
+  for (const [key, asset] of Object.entries(value)) {
+    const p = `document.assets.${key}`;
+    if (!isObj(asset)) return r.add(p, "expected an object");
+    r.check(asset, p, "id", (v) => v === key, "the same as its key");
+    r.check(asset, p, "name", isStr, "a string");
+    r.check(asset, p, "mime", oneOf(IMAGE_MIME_TYPES), "a supported image type");
+    for (const dimension of ["width", "height"]) r.check(asset, p, dimension, (v) => isNum(v) && v > 0, "a positive number");
+    r.check(asset, p, "url", (v) => isStr(v) && typeof asset.mime === "string" && v.startsWith(`data:${asset.mime};base64,`), "a base64 data: URL of the same type");
+  }
 }
 
 function checkEffects(r: Reporter, value: unknown, path: string) {
@@ -64,7 +85,7 @@ function checkNode(r: Reporter, node: Obj, path: string) {
   r.check(node, path, "opacity", isUnit, "a number between 0 and 1");
   r.check(node, path, "visible", isBool, "a boolean");
   r.check(node, path, "locked", isBool, "a boolean");
-  checkPaints(r, node.fills, `${path}.fills`);
+  checkPaints(r, node.fills, `${path}.fills`, node.type !== "text");
   checkPaints(r, node.strokes, `${path}.strokes`);
   checkEffects(r, node.effects, `${path}.effects`);
 
@@ -172,6 +193,7 @@ export function validateDocument(value: unknown): ValidationResult {
   r.check(value, "document", "format", (v) => v === FILE_FORMAT, `"${FILE_FORMAT}"`);
   r.check(value, "document", "schemaVersion", (v) => v === SCHEMA_VERSION, `schema version ${SCHEMA_VERSION}`);
   for (const key of ["id", "name", "createdAt", "updatedAt"]) r.check(value, "document", key, isStr, "a string");
+  checkAssets(r, value.assets);
   if (!Array.isArray(value.pages) || value.pages.length === 0) {
     r.add("document.pages", "expected at least one page");
   } else {

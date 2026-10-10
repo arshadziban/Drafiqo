@@ -3,7 +3,7 @@ import { insertNode } from "../editor/commands";
 import { parseProject, serializeProject } from "../storage/projectFile";
 import { createDocument, createFrame, createRectangle, createText } from "./factory";
 import { ProjectFormatError } from "./migrate";
-import { SCHEMA_VERSION, type DrafiqoDocument } from "./types";
+import { SCHEMA_VERSION, type DrafiqoDocument, type SolidPaint } from "./types";
 import { validateDocument } from "./validate";
 
 function sampleDocument(): DrafiqoDocument {
@@ -77,7 +77,7 @@ describe("validation", () => {
     const doc = structuredClone(sampleDocument());
     const rect = Object.values(doc.pages[0]!.nodes).find((n) => n.type === "rectangle")!;
     rect.width = -5;
-    rect.fills[0]!.color = "red";
+    (rect.fills[0] as SolidPaint).color = "red";
     const errors = errorsOf(doc).join("\n");
     expect(errors).toContain("width");
     expect(errors).toContain("colour");

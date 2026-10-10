@@ -19,6 +19,7 @@ import {
   zoomToFit,
 } from "../editor/actions";
 import { openExportDialog } from "../components/openExportDialog";
+import { placeImageFiles, placeImageFromPicker } from "../editor/images";
 import { currentPage, useEditor, type Tool } from "../editor/store";
 import { newProject, openProject, saveProject, saveProjectAs } from "../storage/fileActions";
 
@@ -84,7 +85,11 @@ function handle(e: KeyboardEvent): boolean {
         cutSelection();
         return true;
       case "v":
-        paste();
+        // Left to the browser: it fires a paste event that says whether the clipboard holds a picture.
+        return false;
+      case "k":
+        if (!e.shiftKey) return false;
+        void placeImageFromPicker();
         return true;
       case "]":
         reorderSelection("forward");
@@ -189,6 +194,15 @@ function handle(e: KeyboardEvent): boolean {
   return false;
 }
 
+/** Ctrl+V: a picture on the system clipboard is placed; otherwise the copied layers are pasted. */
+function onPaste(e: ClipboardEvent): void {
+  if (useCanvasUi.getState().exportOpen || isTyping(e.target)) return;
+  const pictures = [...(e.clipboardData?.files ?? [])].filter((file) => file.type.startsWith("image/"));
+  e.preventDefault();
+  if (pictures.length > 0) void placeImageFiles(pictures);
+  else paste();
+}
+
 export function installShortcuts(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     // The export dialog is modal: editor shortcuts wait until it closes.
@@ -203,5 +217,9 @@ export function installShortcuts(): () => void {
     if (handle(e)) e.preventDefault();
   };
   window.addEventListener("keydown", onKeyDown);
-  return () => window.removeEventListener("keydown", onKeyDown);
+  document.addEventListener("paste", onPaste);
+  return () => {
+    window.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("paste", onPaste);
+  };
 }

@@ -98,3 +98,35 @@ textarea:focus-visible {
     transition: none !important;
   }
 }
+
+/* Slider: a thin track filled up to --fill, with a round white thumb. */
+input[type="range"].range {
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--color-accent) var(--fill, 0%), var(--color-ink-700) var(--fill, 0%));
+  outline: none;
+}
+input[type="range"].range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.55);
+}
+input[type="range"].range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.55);
+}
+input[type="range"].range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+input[type="range"].range:disabled {
+  pointer-events: none;
+}

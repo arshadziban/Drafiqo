@@ -4,6 +4,7 @@ import {
   Eye,
   EyeOff,
   Group,
+  Image as ImageIcon,
   Lock,
   Plus,
   Trash2,
@@ -206,7 +207,8 @@ const LayerRow = memo(function LayerRow({
   });
   const renaming = useCanvasUi((s) => s.renamingId === id);
   if (!node) return null;
-  const Icon = TYPE_ICONS[node.type];
+  // A rectangle filled with a picture is an image layer.
+  const Icon = node.type === "rectangle" && node.fills.some((f) => f.type === "image") ? ImageIcon : TYPE_ICONS[node.type];
   const container = isContainer(node);
 
   const onClick = (e: React.MouseEvent) => {

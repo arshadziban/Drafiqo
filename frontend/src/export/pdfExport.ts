@@ -4,7 +4,7 @@
 import { outlinePath } from "../canvas/shapes";
 import { localMatrix, parentWorldMatrix, type Matrix, type Rect } from "../document/geometry";
 import { layoutText } from "../document/textLayout";
-import { isContainer, type NodeId, type Page, type Paint, type SceneNode, type TextNode } from "../document/types";
+import { isContainer, type NodeId, type Page, type SceneNode, type SolidPaint, type TextNode } from "../document/types";
 import { sourceBounds } from "./exportRenderer";
 import type { ExportRequest, ExportResult, Size } from "./exportTypes";
 
@@ -86,7 +86,7 @@ class VectorPage {
     return this.fonts.get(name)!;
   }
 
-  private text(node: TextNode, paint: Paint, opacity: number) {
+  private text(node: TextNode, paint: SolidPaint, opacity: number) {
     const layout = layoutText(node);
     const font = standardFont(node);
     if (!/^(arial|helvetica|times new roman|courier new)$/i.test(node.fontFamily)) {
@@ -119,7 +119,12 @@ class VectorPage {
       for (const paint of node.fills) if (paint.visible) this.text(node, paint, opacity);
     } else if (outline && node.type !== "line") {
       for (const paint of node.fills) {
-        if (paint.visible) this.ops.push(this.alpha(opacity * paint.opacity), `${rgb(paint.color)} rg`, outline, "f");
+        if (!paint.visible) continue;
+        if (paint.type === "image") {
+          this.warnings.add("Images are not included in a vector PDF. Use Image mode to keep them.");
+          continue;
+        }
+        this.ops.push(this.alpha(opacity * paint.opacity), `${rgb(paint.color)} rg`, outline, "f");
       }
     }
     if (isContainer(node)) {

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createDocument } from "../document/factory";
+import { setAssets } from "../document/assets";
 import { getPage } from "../document/tree";
 import type { DrafiqoDocument, NodeId, Page, PageId } from "../document/types";
 import { emptyHistory, record, redo, undo, type History } from "../history/history";
@@ -201,6 +202,10 @@ export const useEditor = create<EditorState>()((set, get) => ({
       saveError: null,
     }),
 }));
+
+// Image fills are drawn from the registry, so it must follow the document before React re-renders.
+setAssets(useEditor.getState().doc.assets);
+useEditor.subscribe((s) => setAssets(s.doc.assets));
 
 export function currentPage(s: EditorState): Page {
   return getPage(s.doc, s.pageId) ?? s.doc.pages[0]!;

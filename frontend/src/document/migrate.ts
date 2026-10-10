@@ -7,6 +7,8 @@ type RawDocument = Record<string, unknown>;
  * document one version newer. Add an entry whenever SCHEMA_VERSION is bumped.
  */
 const MIGRATIONS: Record<number, (doc: RawDocument) => RawDocument> = {
+  // v3: documents can carry images; every v2 document has none.
+  2: (doc) => ({ ...doc, assets: {} }),
   // v2: shadows gained `spread`; every v1 effect is a drop shadow, which had none.
   1: (doc) => {
     const pages = Array.isArray(doc.pages) ? doc.pages : [];

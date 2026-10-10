@@ -2,7 +2,8 @@ import { Fragment, type ReactElement, type ReactNode, type SVGProps } from "reac
 import { localMatrix } from "../document/geometry";
 import { layoutText } from "../document/textLayout";
 import { activeLayerBlur, filterPad } from "../document/effects";
-import type { Effect, NodeId, Paint, SceneNode, ShadowEffect, TextNode } from "../document/types";
+import type { Effect, ImagePaint, ImageScaleMode, NodeId, SceneNode, ShadowEffect, SolidPaint, TextNode } from "../document/types";
+import { getAsset } from "../document/assets";
 import { polygonPoints, starPoints, vectorPath } from "./shapes";
 
 type ShapeProps = SVGProps<SVGElement>;
@@ -37,11 +38,26 @@ function shape(node: SceneNode, { key, ...p }: Record<string, unknown> & { key?:
   }
 }
 
+const IMAGE_ASPECT: Record<ImageScaleMode, string> = { fill: "xMidYMid slice", fit: "xMidYMid meet", stretch: "none" };
+
+/** A picture clipped to the node's outline. A missing picture shows as a flat grey placeholder. */
+function ImageFill({ node, paint }: { node: SceneNode; paint: ImagePaint }) {
+  const asset = getAsset(paint.assetId);
+  if (!asset) return geometry(node, { fill: "#3a3d44", fillOpacity: paint.opacity });
+  const clipId = `img-${node.id}-${paint.id}`;
+  return (
+    <g opacity={paint.opacity === 1 ? undefined : paint.opacity}>
+      <clipPath id={clipId}>{geometry(node, {})}</clipPath>
+      <image href={asset.url} x={0} y={0} width={node.width} height={node.height} preserveAspectRatio={IMAGE_ASPECT[paint.scaleMode]} clipPath={`url(#${clipId})`} />
+    </g>
+  );
+}
+
 function fillLayers(node: SceneNode): (ReactElement | null)[] {
   if (node.type === "line") return [];
   return node.fills
     .filter((f) => f.visible)
-    .map((f) => geometry(node, { fill: f.color, fillOpacity: f.opacity }, f.id));
+    .map((f) => (f.type === "image" ? <ImageFill key={f.id} node={node} paint={f} /> : geometry(node, { fill: f.color, fillOpacity: f.opacity }, f.id)));
 }
 
 function strokeLayers(node: SceneNode): (ReactElement | null)[] {
@@ -57,7 +73,7 @@ export function fontStack(family: string): string {
   return `"${family}", system-ui, sans-serif`;
 }
 
-function TextContent({ node, paint }: { node: TextNode; paint: Paint }) {
+function TextContent({ node, paint }: { node: TextNode; paint: SolidPaint }) {
   const layout = layoutText(node);
   const x = node.textAlign === "center" ? node.width / 2 : node.textAlign === "right" ? node.width : 0;
   const anchor = node.textAlign === "center" ? "middle" : node.textAlign === "right" ? "end" : "start";

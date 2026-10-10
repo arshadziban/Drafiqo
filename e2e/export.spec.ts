@@ -43,7 +43,9 @@ async function runExport(page: Page): Promise<{ download: Download; bytes: Buffe
   const downloadPromise = page.waitForEvent("download");
   await dialog(page).getByRole("button", { name: /^Export (PNG|JPG|WebP|SVG|PDF)$/ }).click();
   const download = await downloadPromise;
-  await expect(page.getByTestId("export-status")).toContainText("Exported");
+  // A clean export closes the dialog by itself and confirms with a toast.
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(page.getByTestId("toast")).toContainText("Exported");
   return { download, bytes: await readFile(await download.path()) };
 }
 
@@ -68,23 +70,31 @@ async function decode(page: Page, bytes: Buffer, mime: string, x: number, y: num
 
 test("exports PNG at 1×, 2×, 3× and 4× with matching displayed and actual dimensions", async ({ page }) => {
   await buildArtboard(page);
-  await openExport(page);
-  await expect(dialog(page).getByLabel("Export target")).toHaveText(/.+/);
   const expected = { 1: [375, 812], 2: [750, 1624], 3: [1125, 2436], 4: [1500, 3248] } as const;
   for (const [scale, [width, height]] of Object.entries(expected)) {
+    await openExport(page);
+    await expect(dialog(page).getByLabel("Export target")).toHaveText(/.+/);
     await dialog(page).getByRole("button", { name: `${scale}×`, exact: true }).click();
     await expect(output(page)).toHaveText(`${width} × ${height} px`);
     await expect(dialog(page).getByLabel("Export width")).toHaveValue(String(width));
     const { download, bytes } = await runExport(page);
     expect(download.suggestedFilename()).toBe(scale === "1" ? "Frame 1.png" : `Frame 1@${scale}x.png`);
     expect(readImageSize(bytes)).toEqual({ width, height });
-    await expect(page.getByTestId("export-status")).toContainText(`${width} × ${height} px`);
+    await expect(page.getByTestId("toast")).toContainText(`${width} × ${height} px`);
+    if (scale === "4") {
+      // The file really decodes at that size, and the artwork is where it should be:
+      // the ellipse centre (130, 130 at 1×) is red, the frame corner is its white background.
+      expect(await decode(page, bytes, "image/png", 520, 520)).toEqual({ width: 1500, height: 3248, rgba: [255, 0, 0, 255] });
+      expect((await decode(page, bytes, "image/png", 4, 4)).rgba).toEqual([255, 255, 255, 255]);
+    }
   }
-  // The file really decodes at that size, and the artwork is where it should be:
-  // the ellipse centre (130, 130 at 1×) is red, the frame corner is its white background.
-  const { bytes } = await runExport(page);
-  expect(await decode(page, bytes, "image/png", 520, 520)).toEqual({ width: 1500, height: 3248, rgba: [255, 0, 0, 255] });
-  expect((await decode(page, bytes, "image/png", 4, 4)).rgba).toEqual([255, 255, 255, 255]);
+
+  // A new dialog starts from the defaults again, not from the last export.
+  await openExport(page);
+  await expect(output(page)).toHaveText("375 × 812 px");
+  await expect(dialog(page).getByRole("button", { name: "PNG", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(dialog(page)).toHaveCount(0);
 });
 
 test("custom width and height, aspect lock, and switching back to a preset", async ({ page }) => {
@@ -111,17 +121,26 @@ test("custom width and height, aspect lock, and switching back to a preset", asy
   await expect(output(page)).toHaveText("600 × 400 px");
   await expect(dialog(page).getByText("These proportions differ from the artwork")).toBeVisible();
   await pressed(dialog(page).getByRole("button", { name: "Fit inside" }));
-  let exported = await runExport(page);
+  const exported = await runExport(page);
   expect(exported.download.suggestedFilename()).toBe("Frame 1.png");
   // Fit inside: the artwork is centred and the leftover area stays transparent, not stretched.
   expect(await decode(page, exported.bytes, "image/png", 5, 200)).toEqual({ width: 600, height: 400, rgba: [0, 0, 0, 0] });
   expect((await decode(page, exported.bytes, "image/png", 300, 200)).rgba[3]).toBe(255);
 
+  // The same size again, stretched: the leftover area is filled with the artwork instead.
+  await openExport(page);
+  await lock.click();
+  await width.fill("600");
+  await height.fill("400");
   await dialog(page).getByRole("button", { name: "Stretch" }).click();
-  exported = await runExport(page);
-  expect((await decode(page, exported.bytes, "image/png", 5, 200)).rgba[3]).toBe(255);
+  const stretched = await runExport(page);
+  expect((await decode(page, stretched.bytes, "image/png", 5, 200)).rgba[3]).toBe(255);
 
   // Back to a preset: recalculated from the source, the fit question goes away.
+  await openExport(page);
+  await lock.click();
+  await width.fill("600");
+  await height.fill("400");
   await dialog(page).getByRole("button", { name: "2×", exact: true }).click();
   await expect(width).toHaveValue("750");
   await expect(height).toHaveValue("1624");
@@ -146,6 +165,7 @@ test("PNG and WebP keep transparency; JPG uses the chosen background", async ({ 
   expect(await decode(page, bytes, "image/png", 2, 2)).toEqual({ width: 200, height: 200, rgba: [0, 0, 0, 0] });
   expect((await decode(page, bytes, "image/png", 100, 100)).rgba).toEqual([255, 0, 0, 255]);
 
+  await openExport(page);
   await dialog(page).getByRole("button", { name: "WebP", exact: true }).click();
   await expect(dialog(page).getByLabel("Quality")).toHaveValue("100");
   await expect(dialog(page).getByLabel("Transparent background")).toBeChecked();
@@ -158,14 +178,15 @@ test("PNG and WebP keep transparency; JPG uses the chosen background", async ({ 
   expect(webp.rgba[3]).toBe(0);
 
   // Turning transparency off composites over the chosen colour.
+  await openExport(page);
   await dialog(page).getByLabel("Transparent background").uncheck();
   await dialog(page).getByLabel("Export background hex").fill("0000ff");
   await dialog(page).getByLabel("Export background hex").press("Enter");
-  await dialog(page).getByRole("button", { name: "PNG", exact: true }).click();
   ({ bytes } = await runExport(page));
   expect((await decode(page, bytes, "image/png", 2, 2)).rgba).toEqual([0, 0, 255, 255]);
 
   // JPG always has a background.
+  await openExport(page);
   await dialog(page).getByRole("button", { name: "JPG", exact: true }).click();
   await expect(dialog(page).getByLabel("Transparent background")).toHaveCount(0);
   await dialog(page).getByLabel("Export background hex").fill("00ff00");
@@ -183,12 +204,12 @@ test("PNG and WebP keep transparency; JPG uses the chosen background", async ({ 
 
 test("the quality setting reaches the JPG and WebP encoders", async ({ page }) => {
   await buildArtboard(page);
-  await openExport(page);
   const quality = dialog(page).getByLabel("Quality");
   const sizes: Record<string, number> = {};
   for (const format of ["JPG", "WebP"]) {
-    await dialog(page).getByRole("button", { name: format, exact: true }).click();
     for (const value of ["100", "10"]) {
+      await openExport(page);
+      await dialog(page).getByRole("button", { name: format, exact: true }).click();
       await quality.fill(value);
       sizes[`${format}-${value}`] = (await runExport(page)).bytes.length;
     }
@@ -197,6 +218,8 @@ test("the quality setting reaches the JPG and WebP encoders", async ({ page }) =
   expect(sizes["WebP-10"]).toBeLessThan(sizes["WebP-100"]!);
 
   // Lossless is its own mode and reproduces pixels exactly.
+  await openExport(page);
+  await dialog(page).getByRole("button", { name: "WebP", exact: true }).click();
   await dialog(page).getByLabel("Lossless").check();
   await expect(quality).toBeDisabled();
   const { bytes } = await runExport(page);
@@ -222,6 +245,7 @@ test("exports SVG and PDF with format-appropriate options", async ({ page }) => 
   // It is a valid, renderable image of the right size.
   expect(await decode(page, bytes, "image/svg+xml", 130, 130)).toEqual({ width: 375, height: 812, rgba: [255, 0, 0, 255] });
 
+  await openExport(page);
   await dialog(page).getByRole("button", { name: "PDF", exact: true }).click();
   await expect(output(page)).toHaveText("375 × 812 pt");
   ({ bytes, download } = await runExport(page));
@@ -232,6 +256,8 @@ test("exports SVG and PDF with format-appropriate options", async ({ page }) => 
   expect(pdf).toContain("1 0 0 rg");
   expect(pdf).not.toContain("/DCTDecode");
 
+  await openExport(page);
+  await dialog(page).getByRole("button", { name: "PDF", exact: true }).click();
   await dialog(page).getByRole("button", { name: "Image", exact: true }).click();
   ({ bytes } = await runExport(page));
   pdf = bytes.toString("latin1");
@@ -267,7 +293,48 @@ test("explains invalid sizes and file names and blocks the export", async ({ pag
   expect(download.suggestedFilename()).toBe("Home screen.png");
 
   // Editor shortcuts do not leak through the modal dialog.
+  await openExport(page);
   await page.keyboard.press("Escape");
   await expect(dialog(page)).toHaveCount(0);
   await expect(page.locator('[data-scene] [data-node-type="frame"]')).toHaveCount(1);
+});
+
+test("closes after a clean export and confirms with a toast that goes away", async ({ page }) => {
+  await buildArtboard(page);
+  await openExport(page);
+  await runExport(page);
+  const toast = page.getByTestId("toast");
+  await expect(toast).toContainText("Exported Frame 1.png");
+  await expect(toast).toContainText("375 × 812 px");
+
+  // It can be dismissed...
+  await toast.getByRole("button", { name: "Dismiss" }).click();
+  await expect(toast).toHaveCount(0);
+
+  // ...and otherwise leaves by itself.
+  await openExport(page);
+  await runExport(page);
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveCount(0, { timeout: 8000 });
+});
+
+test("closes even when the export has warnings, and keeps them in a toast until dismissed", async ({ page }) => {
+  await buildArtboard(page);
+  await page.getByTestId("layers").getByText("Ellipse 1").click();
+  await props(page).getByRole("button", { name: "Add effect" }).click();
+  await page.getByRole("menuitem", { name: "Drop shadow" }).click();
+  await page.getByTestId("layers").getByText("Frame 1").click();
+
+  await openExport(page);
+  await dialog(page).getByRole("button", { name: "PDF", exact: true }).click();
+  const { download } = await runExport(page);
+  expect(download.suggestedFilename()).toBe("Frame 1.pdf");
+
+  // A vector PDF cannot carry shadows. That is said in the toast, which does not time out.
+  const toast = page.getByTestId("toast");
+  await expect(toast).toContainText("Shadows and blur effects are not included");
+  await page.waitForTimeout(5500);
+  await expect(toast).toBeVisible();
+  await toast.getByRole("button", { name: "Dismiss" }).click();
+  await expect(toast).toHaveCount(0);
 });
