@@ -1,44 +1,65 @@
-# Dependencies
+# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
 
-# Frontend build output
-dist/
+# ── Frontend build output ────────────────────────────────────────────────────
+/dist/
 *.tsbuildinfo
+.vite/
+vite.config.ts.timestamp-*
 
-# Rust / Tauri build output and generated schemas
-src-tauri/target/
-src-tauri/gen/
+# ── Rust / Tauri ─────────────────────────────────────────────────────────────
+# Build output and the schemas `tauri build` regenerates
+/src-tauri/target/
+/src-tauri/gen/
+**/*.rs.bk
 
 # Mobile icons that `tauri icon` generates; this is a desktop-only app
-src-tauri/icons/android/
-src-tauri/icons/ios/
+/src-tauri/icons/android/
+/src-tauri/icons/ios/
 
-# Test output
-test-results/
-playwright-report/
-blob-report/
-playwright/.cache/
-coverage/
+# Updater / code-signing keys must never be committed
+*.key
+*.key.pub
+*.pem
+*.p12
+*.cer
+*.provisionprofile
 
-# Environment and local overrides
+# ── Test output ──────────────────────────────────────────────────────────────
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/coverage/
+
+# ── Environment and local overrides ──────────────────────────────────────────
 .env
 .env.*
 !.env.example
 *.local
 
-# Logs
+# ── Logs and temporary files ─────────────────────────────────────────────────
 *.log
 npm-debug.log*
-pnpm-debug.log*
+yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.tmp.*
 
-# Editors
+# ── Editors and tools ────────────────────────────────────────────────────────
 .idea/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 *.swp
+*.swo
+*~
+.claude/settings.local.json
 
-# OS files
+# ── OS files ─────────────────────────────────────────────────────────────────
 .DS_Store
+._*
 Thumbs.db
+ehthumbs.db
+Desktop.ini

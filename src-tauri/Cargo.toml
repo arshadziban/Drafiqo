@@ -9,6 +9,11 @@ rust-version = "1.77.2"
 name = "drafiqo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# The binary name is what the macOS Dock and the process list show in dev.
+[[bin]]
+name = "Drafiqo"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
