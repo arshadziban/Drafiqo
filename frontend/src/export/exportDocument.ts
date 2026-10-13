@@ -1,3 +1,4 @@
+import { embeddedFontCss } from "../fonts/fontLibrary";
 import type { Page } from "../document/types";
 import { sizeForScale } from "./exportDimensions";
 import { renderSvg, sourceBounds } from "./exportRenderer";
@@ -28,14 +29,14 @@ export async function renderExport(page: Page, request: ExportRequest): Promise<
     if (request.pdfMode === "vector") return exportVectorPdf(page, request);
     const pixels = sizeForScale(bounds, PDF_IMAGE_SCALE);
     const background = request.transparent ? "#ffffff" : request.background;
-    const surface = await rasterizeSvg(renderSvg(page, request.target, { size: pixels, background }), pixels, background);
+    const surface = await rasterizeSvg(renderSvg(page, request.target, { size: pixels, background, fontCss: await embeddedFontCss(page) }), pixels, background);
     return exportImagePdf(bounds, await encodeRaster(surface, "jpg", { quality: 0.92, lossless: false }), pixels);
   }
 
   if (!isRaster(request.format)) throw new ExportError("Unsupported format.");
   // JPG has no transparency, so transparent areas are composited over the background first.
   const background = request.format === "jpg" || !request.transparent ? request.background : null;
-  const svg = renderSvg(page, request.target, { size: request.size, fit: request.fit, background });
+  const svg = renderSvg(page, request.target, { size: request.size, fit: request.fit, background, fontCss: await embeddedFontCss(page) });
   const surface = await rasterizeSvg(svg, request.size, background);
   const bytes = await encodeRaster(surface, request.format, { quality: request.quality, lossless: request.lossless });
 

@@ -154,16 +154,21 @@ function PagesPanel() {
 
 type DropZone = { id: NodeId; where: "above" | "below" | "inside" };
 
+/** An auto layout frame lists its children the way they read on the canvas: first one on top. */
+function listsForward(page: Page, parentId: NodeId | null): boolean {
+  const parent = parentId ? page.nodes[parentId] : undefined;
+  return parent?.type === "frame" && parent.layout !== undefined;
+}
+
 /** Rows in panel order: front-most layer first, children under their parent. */
 function visibleRows(page: Page, collapsed: Record<NodeId, boolean>): { id: NodeId; depth: number }[] {
   const rows: { id: NodeId; depth: number }[] = [];
-  const visit = (ids: readonly NodeId[], depth: number) => {
-    for (let i = ids.length - 1; i >= 0; i--) {
-      const id = ids[i]!;
+  const visit = (ids: readonly NodeId[], depth: number, forward = false) => {
+    for (const id of forward ? ids : [...ids].reverse()) {
       const node = page.nodes[id];
       if (!node) continue;
       rows.push({ id, depth });
-      if (isContainer(node) && !collapsed[id]) visit(node.children, depth + 1);
+      if (isContainer(node) && !collapsed[id]) visit(node.children, depth + 1, listsForward(page, id));
     }
   };
   visit(page.children, 0);
@@ -181,7 +186,8 @@ function applyDrop(zone: DropZone, dragged: NodeId[]) {
   }
   const siblings = childrenOf(page, target.parentId);
   // The panel lists layers front-first, so "above" a row means later in paint order.
-  const before = zone.where === "below" ? zone.id : (siblings[siblings.indexOf(zone.id) + 1] ?? null);
+  const forward = listsForward(page, target.parentId);
+  const before = zone.where === (forward ? "above" : "below") ? zone.id : (siblings[siblings.indexOf(zone.id) + 1] ?? null);
   const safeBefore = before && dragged.includes(before) ? (siblings.slice(siblings.indexOf(before) + 1).find((id) => !dragged.includes(id)) ?? null) : before;
   s.edit((p) => moveNodesInTree(p, dragged, target.parentId, safeBefore), dragged);
 }

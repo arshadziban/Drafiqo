@@ -47,6 +47,8 @@ export interface StoragePlatform {
    * no window could be opened.
    */
   openPresentation(path: string): Promise<boolean>;
+  /** Families of the fonts installed on this computer; empty when the host cannot tell. */
+  listFonts(): Promise<string[]>;
   /** Calls `handler` before the window closes; return false to keep it open. */
   onCloseRequested(handler: () => Promise<boolean>): void;
 }
@@ -88,6 +90,10 @@ function desktopPlatform(): StoragePlatform {
         throw new Error(typeof error === "string" ? error : "The project could not be renamed.");
       }
       return to;
+    },
+    async listFonts() {
+      const { invoke } = await core();
+      return invoke<string[]>("list_system_fonts");
     },
     canChooseFolder: true,
     async chooseFolder(startIn) {
@@ -160,6 +166,13 @@ function desktopPlatform(): StoragePlatform {
 function browserPlatform(): StoragePlatform {
   return {
     kind: "browser",
+    async listFonts() {
+      // Chromium can list local fonts once the user allows it; other browsers cannot.
+      const query = (window as { queryLocalFonts?: () => Promise<{ family: string }[]> }).queryLocalFonts;
+      if (!query) return [];
+      const fonts = await query.call(window);
+      return [...new Set(fonts.map((font) => font.family))].sort((a, b) => a.localeCompare(b));
+    },
     openProject() {
       return new Promise((resolve) => {
         const input = document.createElement("input");

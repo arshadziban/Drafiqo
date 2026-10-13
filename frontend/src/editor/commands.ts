@@ -2,7 +2,7 @@
 // one, sharing every untouched node with the input so history snapshots stay
 // cheap and React can skip unchanged layers.
 
-import { createGroup, createId, createPage, type Box } from "../document/factory";
+import { DEFAULT_NAMES, createFrame, createGroup, createId, createPage, type Box } from "../document/factory";
 import {
   applyToPoint,
   boundsOfPoints,
@@ -13,6 +13,7 @@ import {
   multiply,
   parentWorldMatrix,
   rotatePoint,
+  round,
   translation,
   worldBounds,
   worldMatrix,
@@ -24,7 +25,9 @@ import { fitTextNode } from "../document/textLayout";
 import { childrenOf, isDescendantOf, nextName, subtreeIds, topLevelSelection } from "../document/tree";
 import {
   isContainer,
+  type AutoLayout,
   type BaseNode,
+  type LayoutItem,
   type DrafiqoDocument,
   type FrameNode,
   type LineNode,
@@ -83,11 +86,191 @@ function normalize(node: SceneNode): SceneNode {
   return node;
 }
 
+/** The box a rotated child takes up in its parent's space. */
+const boxInParent = (node: SceneNode): Rect => boundsOfPoints(cornersOf(localMatrix(node), node.width, node.height));
+
+/** A node's x/y after its size changes, with its top-left corner staying where it is in the parent. */
+function keepTopLeft(node: SceneNode, width: number, height: number): Point {
+  const fixed = applyToPoint(localMatrix(node), { x: 0, y: 0 });
+  const offset = rotatePoint({ x: -width / 2, y: -height / 2 }, node.rotation);
+  return { x: fixed.x - offset.x - width / 2, y: fixed.y - offset.y - height / 2 };
+}
+
+type Axis = "x" | "y";
+const AXES: readonly Axis[] = ["x", "y"];
+const sizeAlong = (box: { width: number; height: number }, axis: Axis) => (axis === "x" ? box.width : box.height);
+
+/** A size the layout wants for a node, kept within the node's own minimum and maximum. */
+function withinLimits(node: SceneNode, axis: Axis, value: number): number {
+  const item = node.layoutItem;
+  const min = axis === "x" ? item?.minWidth : item?.minHeight;
+  const max = axis === "x" ? item?.maxWidth : item?.maxHeight;
+  let size = value;
+  if (max !== undefined) size = Math.min(size, max);
+  if (min !== undefined) size = Math.max(size, min);
+  return Math.max(1, size);
+}
+
+/** Whether a layer takes part in its auto layout parent's flow. */
+const flows = (node: SceneNode) => node.visible && !node.layoutItem?.absolute;
+
+/**
+ * Lays out every auto layout frame. Each frame settles its children first,
+ * then its widths, then its heights (a text that is made narrower gets taller),
+ * and finally places the children. Returns the input page when everything is
+ * already in place.
+ */
+function applyAutoLayout(page: Page): Page {
+  let nodes: Nodes | null = null;
+  const current = () => nodes ?? page.nodes;
+  const mutable = () => (nodes ??= { ...page.nodes });
+  const eps = 1e-6;
+
+  /** `stretchX`/`stretchY`: the parent decides this node's size along that axis, so it cannot hug there. */
+  const visit = (id: NodeId, stretchX: boolean, stretchY: boolean) => {
+    const before = current()[id];
+    if (!before || !isContainer(before)) return;
+    if (before.type !== "frame" || !before.layout) {
+      before.children.forEach((childId) => visit(childId, false, false));
+      return;
+    }
+    const layout = before.layout;
+    const horizontal = layout.mode === "horizontal";
+    const fills = (child: SceneNode, axis: Axis) =>
+      !layout.wrap && child.rotation === 0 && flows(child) && (axis === "x" ? child.layoutItem?.fillWidth : child.layoutItem?.fillHeight) === true;
+    const settle = (childId: NodeId) => {
+      const child = current()[childId];
+      if (child) visit(childId, fills(child, "x"), fills(child, "y"));
+    };
+    const frameNow = () => current()[id] as FrameNode;
+    const itemsNow = () =>
+      frameNow().children.flatMap((childId) => {
+        const child = current()[childId];
+        return child && flows(child) ? [{ child, box: boxInParent(child) }] : [];
+      });
+    const hugs = (axis: Axis) => (axis === "x" ? layout.widthSizing === "hug" && !stretchX : layout.heightSizing === "hug" && !stretchY);
+    const padding = (axis: Axis) => (axis === "x" ? layout.paddingLeft + layout.paddingRight : layout.paddingTop + layout.paddingBottom);
+    const setFrameSize = (axis: Axis, size: number) => {
+      const frame = frameNow();
+      if (Math.abs(size - sizeAlong(frame, axis)) <= eps) return;
+      const width = axis === "x" ? size : frame.width;
+      const height = axis === "y" ? size : frame.height;
+      mutable()[id] = { ...frame, ...keepTopLeft(frame, width, height), width, height };
+    };
+
+    before.children.forEach(settle);
+    if (itemsNow().length === 0) return;
+
+    for (const axis of AXES) {
+      const items = itemsNow();
+      const isMain = (axis === "x") === horizontal;
+      const stretched = items.filter((item) => fills(item.child, axis));
+      const rigid = items.filter((item) => !fills(item.child, axis));
+      const sum = (list: typeof items) => list.reduce((total, item) => total + sizeAlong(item.box, axis), 0);
+      const targets = new Map<NodeId, number>();
+      if (isMain) {
+        const gaps = layout.gap * (items.length - 1);
+        if (hugs(axis)) setFrameSize(axis, withinLimits(frameNow(), axis, padding(axis) + sum(items) + gaps));
+        // In a frame that hugs, there is no spare room to share out.
+        else if (stretched.length > 0) {
+          const share = (sizeAlong(frameNow(), axis) - padding(axis) - gaps - sum(rigid)) / stretched.length;
+          for (const { child } of stretched) targets.set(child.id, withinLimits(child, axis, share));
+        }
+      } else if (!layout.wrap) {
+        if (hugs(axis)) {
+          const tallest = Math.max(...(rigid.length > 0 ? rigid : items).map((item) => sizeAlong(item.box, axis)));
+          setFrameSize(axis, withinLimits(frameNow(), axis, padding(axis) + tallest));
+        }
+        const room = sizeAlong(frameNow(), axis) - padding(axis);
+        for (const { child } of stretched) targets.set(child.id, withinLimits(child, axis, room));
+      }
+      for (const [childId, size] of targets) {
+        const child = current()[childId]!;
+        if (Math.abs(size - sizeAlong(child, axis)) <= eps) continue;
+        resizeIn(page, mutable(), childId, axis === "x" ? size : child.width, axis === "y" ? size : child.height, 0, 0);
+        settle(childId);
+      }
+    }
+
+    const items = itemsNow();
+    const main = (r: { width: number; height: number }) => (horizontal ? r.width : r.height);
+    const cross = (r: { width: number; height: number }) => (horizontal ? r.height : r.width);
+    const mainAxis: Axis = horizontal ? "x" : "y";
+    const crossAxis: Axis = horizontal ? "y" : "x";
+    const mainStart = horizontal ? layout.paddingLeft : layout.paddingTop;
+    const crossStart = horizontal ? layout.paddingTop : layout.paddingLeft;
+    const room = main(frameNow()) - padding(mainAxis);
+
+    // Rows (or columns): one, unless the frame wraps and has a length to wrap at.
+    const lines: (typeof items)[] = [[]];
+    let used = 0;
+    for (const item of items) {
+      const line = lines[lines.length - 1]!;
+      const next = used + (line.length > 0 ? layout.gap : 0) + main(item.box);
+      if (layout.wrap && !hugs(mainAxis) && line.length > 0 && next > room + eps) {
+        lines.push([item]);
+        used = main(item.box);
+      } else {
+        line.push(item);
+        used = next;
+      }
+    }
+    const depths = lines.map((line) => Math.max(...line.map((item) => cross(item.box))));
+    if (layout.wrap && hugs(crossAxis)) {
+      const stacked = depths.reduce((total, depth) => total + depth, 0) + layout.gap * (lines.length - 1);
+      setFrameSize(crossAxis, withinLimits(frameNow(), crossAxis, padding(crossAxis) + stacked));
+    }
+
+    const lean = layout.counterAlign === "center" ? 0.5 : layout.counterAlign === "end" ? 1 : 0;
+    let across = crossStart;
+    lines.forEach((line, lineIndex) => {
+      // A single row aligns across the whole frame; wrapped rows align within their own height.
+      const depth = layout.wrap ? depths[lineIndex]! : cross(frameNow()) - padding(crossAxis);
+      const content = line.reduce((total, item) => total + main(item.box), 0);
+      const gaps = line.length - 1;
+      let gap = layout.gap;
+      let cursor = mainStart;
+      if (!hugs(mainAxis)) {
+        const free = room - content;
+        if (layout.primaryAlign === "space-between" && gaps > 0) gap = free / gaps;
+        else if (layout.primaryAlign === "center") cursor += (free - gap * gaps) / 2;
+        else if (layout.primaryAlign === "end") cursor += free - gap * gaps;
+      }
+      for (const { child, box } of line) {
+        const offset = across + (depth - cross(box)) * lean;
+        const dx = (horizontal ? cursor : offset) - box.x;
+        const dy = (horizontal ? offset : cursor) - box.y;
+        if (Math.abs(dx) > eps || Math.abs(dy) > eps) mutable()[child.id] = { ...current()[child.id]!, x: child.x + dx, y: child.y + dy };
+        cursor += main(box) + gap;
+      }
+      across += depth + layout.gap;
+    });
+  };
+
+  page.children.forEach((id) => visit(id, false, false));
+  return nodes ? { ...page, nodes } : page;
+}
+
+/**
+ * Settles what follows from an edit: auto layout frames place their children
+ * and groups hug theirs. Returns the input page when nothing needs to change.
+ */
+export function refitGroups(page: Page): Page {
+  let next = fitGroupBoxes(page);
+  // A frame that grows can move a group's edge and the other way round, so repeat until both agree.
+  for (let pass = 0; pass < 4; pass++) {
+    const laid = applyAutoLayout(next);
+    if (laid === next) break;
+    next = fitGroupBoxes(laid);
+  }
+  return next;
+}
+
 /**
  * Keeps every group's box tight around its children and removes groups that
  * have become empty. Returns the input page when nothing needs to change.
  */
-export function refitGroups(page: Page): Page {
+function fitGroupBoxes(page: Page): Page {
   let nodes: Nodes | null = null;
   let rootChildren: NodeId[] | null = null;
   const current = () => nodes ?? page.nodes;
@@ -264,16 +447,13 @@ function scaleContents(nodes: Nodes, id: NodeId, sx: number, sy: number): void {
   }
 }
 
-/**
- * Resizes a node, keeping the point at the given fraction of its box
- * (0,0 = top-left, 1,1 = bottom-right) fixed in the parent's space.
- */
-export function resizeNode(page: Page, id: NodeId, width: number, height: number, anchorX = 0, anchorY = 0): Page {
-  const node = page.nodes[id];
-  if (!node) return page;
+/** The work of `resizeNode` on a draft node map, without settling layouts. Returns false when the size is unchanged. */
+function resizeIn(page: Page, nodes: Nodes, id: NodeId, width: number, height: number, anchorX: number, anchorY: number): boolean {
+  const node = nodes[id];
+  if (!node) return false;
   const newWidth = Math.max(1, width);
   const newHeight = node.type === "line" ? 0 : Math.max(1, height);
-  if (newWidth === node.width && newHeight === node.height) return page;
+  if (newWidth === node.width && newHeight === node.height) return false;
 
   const fixed = applyToPoint(localMatrix(node), { x: anchorX * node.width, y: anchorY * node.height });
   const centre = { x: newWidth / 2, y: newHeight / 2 };
@@ -290,12 +470,110 @@ export function resizeNode(page: Page, id: NodeId, width: number, height: number
     const autoResize = newHeight !== node.height && newWidth === node.width ? "fixed" : resized.autoResize === "fixed" ? "fixed" : "height";
     resized = fitTextNode({ ...resized, autoResize });
   }
-  const nodes = { ...page.nodes, [id]: resized };
+  nodes[id] = resized;
   scaleContents(nodes, id, node.width ? newWidth / node.width : 1, node.height ? newHeight / node.height : 1);
   for (const sub of subtreeIds({ ...page, nodes }, id)) {
     const n = nodes[sub];
     if (n && sub !== id) nodes[sub] = normalize(n);
   }
+  return true;
+}
+
+/**
+ * Resizes a node, keeping the point at the given fraction of its box
+ * (0,0 = top-left, 1,1 = bottom-right) fixed in the parent's space.
+ */
+export function resizeNode(page: Page, id: NodeId, width: number, height: number, anchorX = 0, anchorY = 0): Page {
+  const node = page.nodes[id];
+  const nodes = { ...page.nodes };
+  if (!node || !resizeIn(page, nodes, id, width, height, anchorX, anchorY)) return page;
+  // A side that is given a size by hand stops hugging its content or filling its parent.
+  const widthSet = Math.max(1, width) !== node.width;
+  const heightSet = node.type !== "line" && Math.max(1, height) !== node.height;
+  let resized = nodes[id]!;
+  if (resized.type === "frame" && resized.layout) {
+    const layout = { ...resized.layout, ...(widthSet ? { widthSizing: "fixed" as const } : {}), ...(heightSet ? { heightSizing: "fixed" as const } : {}) };
+    resized = { ...resized, layout };
+  }
+  if ((widthSet && resized.layoutItem?.fillWidth) || (heightSet && resized.layoutItem?.fillHeight)) {
+    const layoutItem = { ...resized.layoutItem };
+    if (widthSet) delete layoutItem.fillWidth;
+    if (heightSet) delete layoutItem.fillHeight;
+    resized = { ...resized, layoutItem };
+  }
+  nodes[id] = resized;
+  return refitGroups({ ...page, nodes });
+}
+
+/** Scales everything a node is drawn with: its box, strokes, corners, effects, type and path. */
+function scaleAppearance(node: SceneNode, factor: number): SceneNode {
+  const by = (value: number) => round(value * factor);
+  const limits = node.layoutItem && { ...node.layoutItem };
+  if (limits) {
+    for (const key of ["minWidth", "maxWidth", "minHeight", "maxHeight"] as const) {
+      if (limits[key] !== undefined) limits[key] = by(limits[key]);
+    }
+  }
+  const scaled = {
+    ...node,
+    ...(limits ? { layoutItem: limits } : {}),
+    width: by(node.width),
+    height: by(node.height),
+    strokeWidth: by(node.strokeWidth),
+    effects: node.effects.map((e) =>
+      e.type === "layer-blur" ? { ...e, blur: by(e.blur) } : { ...e, offsetX: by(e.offsetX), offsetY: by(e.offsetY), blur: by(e.blur), spread: by(e.spread) },
+    ),
+  } as SceneNode;
+  if (scaled.type === "frame" || scaled.type === "rectangle") {
+    const cornerRadii = scaled.cornerRadii.map(by) as unknown as typeof scaled.cornerRadii;
+    if (scaled.type === "frame" && scaled.layout) {
+      const { gap, paddingTop, paddingRight, paddingBottom, paddingLeft } = scaled.layout;
+      const layout = { ...scaled.layout, gap: by(gap), paddingTop: by(paddingTop), paddingRight: by(paddingRight), paddingBottom: by(paddingBottom), paddingLeft: by(paddingLeft) };
+      return { ...scaled, cornerRadii, layout };
+    }
+    return { ...scaled, cornerRadii };
+  }
+  if (scaled.type === "text") {
+    return { ...scaled, fontSize: Math.max(0.01, by(scaled.fontSize)), letterSpacing: by(scaled.letterSpacing) };
+  }
+  if (scaled.type === "vector") {
+    return {
+      ...scaled,
+      points: scaled.points.map((p) => ({
+        x: by(p.x),
+        y: by(p.y),
+        ...(p.inX !== undefined && p.inY !== undefined ? { inX: by(p.inX), inY: by(p.inY) } : {}),
+        ...(p.outX !== undefined && p.outY !== undefined ? { outX: by(p.outX), outY: by(p.outY) } : {}),
+      })),
+    };
+  }
+  return scaled;
+}
+
+/**
+ * Scales a node and everything inside it by one factor, like enlarging a
+ * picture of it: stroke widths, corner radii, effects and font sizes grow
+ * along with the boxes. The point at the given fraction of its box stays fixed.
+ */
+export function scaleNode(page: Page, id: NodeId, factor: number, anchorX = 0, anchorY = 0): Page {
+  const node = page.nodes[id];
+  if (!node || !Number.isFinite(factor) || factor <= 0 || factor === 1) return page;
+
+  const nodes = { ...page.nodes };
+  for (const sub of subtreeIds(page, id)) {
+    const n = nodes[sub];
+    if (!n) continue;
+    const scaled = scaleAppearance(n, factor);
+    // A child's place in its parent scales with the parent; the root's is settled below.
+    nodes[sub] = normalize(sub === id ? scaled : { ...scaled, x: round(n.x * factor), y: round(n.y * factor) });
+  }
+
+  // Text re-fits its own box, so the anchor is placed using the size it ended up with.
+  const root = nodes[id]!;
+  const fixed = applyToPoint(localMatrix(node), { x: anchorX * node.width, y: anchorY * node.height });
+  const centre = { x: root.width / 2, y: root.height / 2 };
+  const offset = rotatePoint({ x: anchorX * root.width - centre.x, y: anchorY * root.height - centre.y }, node.rotation);
+  nodes[id] = { ...root, x: round(fixed.x - offset.x - centre.x), y: round(fixed.y - offset.y - centre.y) };
   return refitGroups({ ...page, nodes });
 }
 
@@ -481,6 +759,180 @@ export function moveNodesInTree(page: Page, ids: readonly NodeId[], parentId: No
 function isContainerId(page: Page, id: NodeId): boolean {
   const node = page.nodes[id];
   return !!node && isContainer(node);
+}
+
+// ---------------------------------------------------------------------------
+// Auto layout
+// ---------------------------------------------------------------------------
+
+/** Reads a row or a column out of how layers are arranged now: the direction, their order and the gap between them. */
+function inferLayout(items: { id: NodeId; box: Rect }[]): { mode: AutoLayout["mode"]; gap: number; order: NodeId[] } {
+  const centres = items.map(({ box }) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 }));
+  const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+  const horizontal = items.length < 2 || spread(centres.map((c) => c.x)) >= spread(centres.map((c) => c.y));
+  const start = (r: Rect) => (horizontal ? r.x : r.y);
+  const size = (r: Rect) => (horizontal ? r.width : r.height);
+  const sorted = [...items].sort((a, b) => start(a.box) - start(b.box));
+  let gap = 10;
+  if (sorted.length > 1) {
+    const first = sorted[0]!.box;
+    const last = sorted[sorted.length - 1]!.box;
+    const content = sorted.reduce((sum, item) => sum + size(item.box), 0);
+    gap = Math.max(0, Math.round((start(last) + size(last) - start(first) - content) / (sorted.length - 1)));
+  }
+  return { mode: horizontal ? "horizontal" : "vertical", gap, order: sorted.map((item) => item.id) };
+}
+
+/**
+ * Turns the selection into an auto layout frame. A single plain frame gets the
+ * layout itself, keeping its size; anything else is wrapped in a new frame
+ * that hugs it. The layers keep the arrangement they visibly had.
+ */
+export function addAutoLayout(page: Page, ids: readonly NodeId[]): { page: Page; frameId: NodeId | null } {
+  const members = topLevelSelection(page, ids);
+  const only = members.length === 1 ? page.nodes[members[0]!] : undefined;
+
+  if (only?.type === "frame") {
+    if (only.layout) return { page, frameId: only.id };
+    const items = only.children.flatMap((id) => {
+      const child = page.nodes[id];
+      return child ? [{ id, box: boxInParent(child) }] : [];
+    });
+    const { mode, gap, order } = inferLayout(items);
+    // The padding is the room the frame already leaves around its layers.
+    const inset = (values: number[]) => (values.length > 0 ? Math.max(0, Math.round(Math.min(...values))) : 0);
+    const boxes = items.filter((item) => page.nodes[item.id]!.visible).map((item) => item.box);
+    const layout: AutoLayout = {
+      mode,
+      gap,
+      paddingTop: inset(boxes.map((b) => b.y)),
+      paddingRight: inset(boxes.map((b) => only.width - b.x - b.width)),
+      paddingBottom: inset(boxes.map((b) => only.height - b.y - b.height)),
+      paddingLeft: inset(boxes.map((b) => b.x)),
+      primaryAlign: "start",
+      counterAlign: "start",
+      widthSizing: "fixed",
+      heightSizing: "fixed",
+      wrap: false,
+    };
+    const frame = { ...only, children: order, layout };
+    return { page: refitGroups({ ...page, nodes: { ...page.nodes, [only.id]: frame } }), frameId: only.id };
+  }
+
+  const front = members[members.length - 1];
+  if (!front) return { page, frameId: null };
+  const worlds = members.map((id) => ({ id, box: worldBounds(page, id) }));
+  const { mode, gap, order } = inferLayout(worlds);
+  const bounds = boundsOfPoints(worlds.flatMap(({ box }) => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]));
+  const parentId = page.nodes[front]!.parentId;
+  const index = childrenOf(page, parentId).indexOf(front) + 1;
+  const frame = { ...createFrame(bounds), name: nextName(page, DEFAULT_NAMES.frame), fills: [], clipContent: false };
+  let next = attach({ ...page, nodes: { ...page.nodes, [frame.id]: frame } }, frame.id, null);
+  next = placeNode(next, frame.id, localMatrix(frame), parentId, index);
+  for (const id of order) {
+    const world = worldMatrix(next, id);
+    next = attach(detach(next, id), id, frame.id);
+    const local = multiply(invert(parentWorldMatrix(next, frame.id)), world);
+    const node = next.nodes[id]!;
+    next = { ...next, nodes: { ...next.nodes, [id]: { ...node, ...decompose(local, node.width, node.height) } } };
+  }
+  const layout: AutoLayout = {
+    mode,
+    gap,
+    paddingTop: 0,
+    paddingRight: 0,
+    paddingBottom: 0,
+    paddingLeft: 0,
+    primaryAlign: "start",
+    counterAlign: "center",
+    widthSizing: "hug",
+    heightSizing: "hug",
+    wrap: false,
+  };
+  const placed = next.nodes[frame.id] as FrameNode;
+  next = { ...next, nodes: { ...next.nodes, [frame.id]: { ...placed, layout } } };
+  return { page: refitGroups(next), frameId: frame.id };
+}
+
+/** Changes the layout of auto layout frames, or with `null` hands their children back to free placement. */
+export function setAutoLayout(page: Page, ids: readonly NodeId[], patch: Partial<AutoLayout> | null): Page {
+  const nodes = { ...page.nodes };
+  let changed = false;
+  for (const id of ids) {
+    const node = nodes[id];
+    if (!node || node.type !== "frame" || !node.layout) continue;
+    if (patch === null) {
+      const { layout: _removed, ...plain } = node;
+      nodes[id] = plain;
+    } else {
+      const layout = { ...node.layout, ...patch };
+      if ((Object.keys(layout) as (keyof AutoLayout)[]).every((key) => layout[key] === node.layout![key])) continue;
+      nodes[id] = { ...node, layout };
+    }
+    changed = true;
+  }
+  return changed ? refitGroups({ ...page, nodes }) : page;
+}
+
+/**
+ * Where a layer dropped at a page-space point lands among an auto layout
+ * frame's children: the sibling it goes in front of, or null for the end.
+ * Undefined when the parent does not lay its children out.
+ */
+export function layoutSlotAt(page: Page, parentId: NodeId | null, point: Point, exclude: ReadonlySet<NodeId>): NodeId | null | undefined {
+  const parent = parentId ? page.nodes[parentId] : undefined;
+  if (!parent || parent.type !== "frame" || !parent.layout) return undefined;
+  const local = applyToPoint(invert(worldMatrix(page, parent.id)), point);
+  const horizontal = parent.layout.mode === "horizontal";
+  const along = horizontal ? local.x : local.y;
+  const across = horizontal ? local.y : local.x;
+  for (const id of parent.children) {
+    const child = page.nodes[id];
+    if (!child || exclude.has(id) || !flows(child)) continue;
+    const box = boxInParent(child);
+    const centre = horizontal ? box.x + box.width / 2 : box.y + box.height / 2;
+    if (parent.layout.wrap) {
+      // Rows come one after another: the slot is in the first row the point has not passed.
+      const top = horizontal ? box.y : box.x;
+      const bottom = top + (horizontal ? box.height : box.width);
+      if (across < top || (across <= bottom && along < centre)) return id;
+    } else if (along < centre) return id;
+  }
+  return null;
+}
+
+/**
+ * Sets how layers behave in their auto layout parent (fill, absolute) and the
+ * limits on their size. A key given as undefined is cleared.
+ */
+export function setLayoutItem(page: Page, ids: readonly NodeId[], patch: LayoutItem): Page {
+  const nodes = { ...page.nodes };
+  let changed = false;
+  for (const id of ids) {
+    const node = nodes[id];
+    if (!node) continue;
+    const item: LayoutItem = { ...node.layoutItem };
+    for (const key of Object.keys(patch) as (keyof LayoutItem)[]) {
+      const value = patch[key];
+      if (value === undefined || value === false) delete item[key];
+      else (item as Record<string, unknown>)[key] = value;
+    }
+    const keys = Object.keys(item) as (keyof LayoutItem)[];
+    const was = node.layoutItem ?? {};
+    if (keys.length === Object.keys(was).length && keys.every((key) => item[key] === was[key])) continue;
+    const { layoutItem: _old, ...bare } = node;
+    nodes[id] = (keys.length > 0 ? { ...bare, layoutItem: item } : bare) as SceneNode;
+    changed = true;
+
+    // A frame cannot hug along its direction and hand out spare room there at once: it keeps its size.
+    const parent = node.parentId ? nodes[node.parentId] : undefined;
+    if (parent?.type === "frame" && parent.layout) {
+      const horizontal = parent.layout.mode === "horizontal";
+      if (patch.fillWidth && horizontal && parent.layout.widthSizing === "hug") nodes[parent.id] = { ...parent, layout: { ...parent.layout, widthSizing: "fixed" } };
+      if (patch.fillHeight && !horizontal && parent.layout.heightSizing === "hug") nodes[parent.id] = { ...parent, layout: { ...parent.layout, heightSizing: "fixed" } };
+    }
+  }
+  return changed ? refitGroups({ ...page, nodes }) : page;
 }
 
 // ---------------------------------------------------------------------------

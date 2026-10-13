@@ -34,6 +34,129 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId("canvas")).toBeVisible();
 });
 
+test("scales a layer with the scale tool, stroke included", async ({ page }) => {
+  await draw(page, "r", [400, 200], [600, 350]);
+  await page.getByRole("button", { name: "Add stroke" }).click();
+  await setField(page, "Stroke width", "2");
+
+  // K switches to the scale tool; the bottom-right handle scales from the top-left corner.
+  await page.keyboard.press("k");
+  await drag(page, [600, 350], [800, 500]);
+  await expect(field(page, "Width")).toHaveValue("400");
+  await expect(field(page, "Height")).toHaveValue("300");
+  await expect(field(page, "Stroke width")).toHaveValue("4");
+
+  // The panel reads the factor since the layer was picked up, and sets it.
+  await expect(field(page, "Scale factor")).toHaveValue("2x");
+  await setField(page, "Scale factor", "1");
+  await expect(field(page, "Width")).toHaveValue("200");
+  await expect(field(page, "Stroke width")).toHaveValue("2");
+  await setField(page, "Scale width", "300");
+  await expect(field(page, "Height")).toHaveValue("225");
+  await expect(field(page, "Scale factor")).toHaveValue("1.5x");
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(field(page, "Width")).toHaveValue("200");
+  await page.getByRole("button", { name: "Close scale" }).click();
+  await expect(field(page, "Scale factor")).toHaveCount(0);
+});
+
+test("picks a Google font from the searchable font list and embeds it in exports", async ({ page }) => {
+  // Google is stood in for: the "font" is a wide local face, so loading it visibly changes the text.
+  await page.route("https://fonts.googleapis.com/**", (route) => {
+    const subset = new URL(route.request().url()).searchParams.has("text");
+    const src = subset ? "url(https://fonts.gstatic.com/s/lobster/subset.woff2) format('woff2')" : "local('Courier New')";
+    return route.fulfill({ contentType: "text/css", headers: { "access-control-allow-origin": "*" }, body: `@font-face { font-family: 'Lobster'; font-weight: 400; src: ${src}; }` });
+  });
+  await page.route("https://fonts.gstatic.com/**", (route) => route.fulfill({ contentType: "font/woff2", headers: { "access-control-allow-origin": "*" }, body: "font-bytes" }));
+
+  await page.keyboard.press("t");
+  await page.mouse.click(450, 300);
+  await page.keyboard.type("Hello there");
+  await page.keyboard.press("Escape");
+  const width = Number(await field(page, "Width").inputValue());
+
+  await page.getByRole("button", { name: "Font family" }).click();
+  const fonts = page.getByRole("listbox", { name: "Fonts" });
+  await expect(fonts.getByText("Google Fonts")).toHaveCount(1);
+  await page.getByLabel("Search fonts").fill("lobs");
+  await expect(fonts.getByRole("option")).toHaveText(["Lobster", "Lobster Two"]);
+  await page.keyboard.press("Enter");
+
+  await expect(page.getByRole("button", { name: "Font family" })).toHaveText("Lobster");
+  await expect(nodes(page, "text").locator("text")).toHaveAttribute("font-family", /^"Lobster"/);
+  // The text box was fitted with the new face, not the one it replaced.
+  await expect.poll(async () => Number(await field(page, "Width").inputValue())).toBeGreaterThan(width);
+
+  // Pictures made from the page carry the font, cut down to the letters used.
+  const css = await page.evaluate(async () => {
+    const fonts = await import("/src/fonts/fontLibrary.ts" as string);
+    const { useEditor, currentPage } = await import("/src/editor/store.ts" as string);
+    return fonts.embeddedFontCss(currentPage(useEditor.getState())) as Promise<string>;
+  });
+  expect(css).toContain("font-family: 'Lobster'");
+  expect(css).toContain("url(data:font/woff2;base64,");
+});
+
+test("lines layers up with auto layout and re-flows them", async ({ page }) => {
+  await draw(page, "r", [400, 200], [500, 300]);
+  await draw(page, "o", [560, 200], [660, 300]);
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Shift+A");
+
+  // The new frame hugs the two layers and keeps the gap they had.
+  await expect(nodes(page, "frame")).toHaveCount(1);
+  await expect(field(page, "Gap")).toHaveValue("60");
+  await expect(field(page, "Width")).toHaveValue("260");
+
+  await setField(page, "Gap", "20");
+  await setField(page, "Horizontal padding", "10");
+  await expect(field(page, "Width")).toHaveValue("240");
+  await page.getByRole("button", { name: "Vertical layout" }).click();
+  await expect(field(page, "Width")).toHaveValue("120");
+  await expect(field(page, "Height")).toHaveValue("220");
+
+  // The layers panel lists the children the way they read on the canvas.
+  await expect(layers(page)).toHaveText(["Frame 1", "Rectangle 1", "Ellipse 1"]);
+
+  // Dragging the second layer above the first swaps them, showing where it will land on the way.
+  await page.mouse.dblclick(460, 370);
+  await expect(field(page, "Y position")).toHaveValue("120");
+  await page.mouse.move(460, 370);
+  await page.mouse.down();
+  await page.mouse.move(460, 300, { steps: 4 });
+  await page.mouse.move(460, 215, { steps: 4 });
+  await expect(page.locator("[data-layout-drop] line")).toHaveCount(1);
+  await expect(page.locator("[data-layout-drop] polygon")).toHaveCount(1);
+  await page.mouse.up();
+  await expect(page.locator("[data-layout-drop]")).toHaveCount(0);
+  await expect(field(page, "Y position")).toHaveValue("0");
+  await expect(layers(page)).toHaveText(["Frame 1", "Ellipse 1", "Rectangle 1"]);
+
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(field(page, "Y position")).toHaveValue("120");
+
+  // A child set to fill takes the whole width between the paddings.
+  await layers(page).filter({ hasText: "Frame 1" }).click();
+  await page.getByRole("button", { name: "Independent padding" }).click();
+  await setField(page, "Left padding", "30");
+  await setField(page, "Width", "300");
+  await layers(page).filter({ hasText: "Ellipse 1" }).click();
+  await field(page, "Width sizing").click();
+  await page.getByRole("option", { name: "W: Fill" }).click();
+  await expect(field(page, "Width")).toHaveValue("260");
+  await expect(field(page, "X position")).toHaveValue("30");
+
+  // Pinned, it leaves the flow and the other layer moves up.
+  await page.getByRole("button", { name: "Absolute position" }).click();
+  await layers(page).filter({ hasText: "Rectangle 1" }).click();
+  await expect(field(page, "Y position")).toHaveValue("0");
+
+  await layers(page).filter({ hasText: "Frame 1" }).click();
+  await page.getByRole("button", { name: "Remove auto layout" }).click();
+  await expect(field(page, "Gap")).toHaveCount(0);
+});
+
 test("draws a shape and edits it from the canvas and the properties panel", async ({ page }) => {
   await draw(page, "r", [400, 200], [600, 350]);
   await expect(nodes(page, "rectangle")).toHaveCount(1);

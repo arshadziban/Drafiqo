@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { SlideView } from "../editor/present";
-import type { Rect } from "../document/geometry";
+import type { Point, Rect } from "../document/geometry";
 import type { NodeId, PathPoint } from "../document/types";
 import type { SnapGuide } from "./snapping";
 
@@ -11,6 +11,8 @@ import type { SnapGuide } from "./snapping";
 interface CanvasUiState {
   marquee: Rect | null;
   guides: SnapGuide[];
+  /** While a layer is dragged through an auto layout frame: where it will land, and where the pointer holds it. In page space. */
+  layoutDrop: { line: [Point, Point]; ghosts: Point[][] } | null;
   /** Path being drawn with the pen tool, in page space. */
   penPoints: PathPoint[];
   penCursor: { x: number; y: number } | null;
@@ -28,6 +30,7 @@ interface CanvasUiState {
 export const useCanvasUi = create<CanvasUiState>()(() => ({
   marquee: null,
   guides: [],
+  layoutDrop: null,
   penPoints: [],
   penCursor: null,
   contextMenu: null,

@@ -74,7 +74,29 @@ export function Canvas() {
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+
+    // WebKit (the desktop build on macOS) reports a trackpad pinch as gesture events, not as Ctrl+wheel.
+    type PinchEvent = Event & { scale: number; clientX: number; clientY: number };
+    let pinchFrom = 1;
+    const onPinchStart = (e: Event) => {
+      e.preventDefault();
+      pinchFrom = currentViewport(useEditor.getState()).zoom;
+    };
+    const onPinch = (e: Event) => {
+      e.preventDefault();
+      const pinch = e as PinchEvent;
+      const rect = el.getBoundingClientRect();
+      zoomAt({ x: pinch.clientX - rect.left, y: pinch.clientY - rect.top }, pinchFrom * pinch.scale);
+    };
+    el.addEventListener("gesturestart", onPinchStart);
+    el.addEventListener("gesturechange", onPinch);
+    el.addEventListener("gestureend", onPinch);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("gesturestart", onPinchStart);
+      el.removeEventListener("gesturechange", onPinch);
+      el.removeEventListener("gestureend", onPinch);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,7 +133,7 @@ export function Canvas() {
     if (tool !== "pen") finishPen(false, false);
   }, [tool]);
 
-  const cursor = panning || tool === "hand" ? "grab" : tool === "select" ? "var(--cursor-app)" : tool === "text" ? "text" : "crosshair";
+  const cursor = panning || tool === "hand" ? "grab" : tool === "select" || tool === "scale" ? "var(--cursor-app)" : tool === "text" ? "text" : "crosshair";
 
   return (
     <div

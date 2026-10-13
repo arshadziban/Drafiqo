@@ -90,16 +90,56 @@ export interface BaseNode {
   strokes: SolidPaint[];
   strokeWidth: number;
   effects: Effect[];
+  layoutItem?: LayoutItem;
 }
 
 /** Corner radii in the order top-left, top-right, bottom-right, bottom-left. */
 export type CornerRadii = [number, number, number, number];
+
+export type LayoutMode = "horizontal" | "vertical";
+/** Where the children sit along the layout direction. */
+export type LayoutAlign = "start" | "center" | "end" | "space-between";
+export type LayoutCrossAlign = "start" | "center" | "end";
+/** hug: the frame is as large as its children plus padding. fixed: it keeps the size it was given. */
+export type LayoutSizing = "hug" | "fixed";
+
+/** Lines a frame's children up in a row or a column and keeps them there. */
+export interface AutoLayout {
+  mode: LayoutMode;
+  /** Space between neighbouring children; ignored when they are spaced between. */
+  gap: number;
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  primaryAlign: LayoutAlign;
+  counterAlign: LayoutCrossAlign;
+  widthSizing: LayoutSizing;
+  heightSizing: LayoutSizing;
+  /** Children that do not fit start a new row (or column), spaced by the same gap. */
+  wrap: boolean;
+}
+
+/** How a layer behaves inside an auto layout frame, and the limits on a size the layout decides. */
+export interface LayoutItem {
+  /** Stretches to the room the parent has along that axis. */
+  fillWidth?: boolean;
+  fillHeight?: boolean;
+  /** Left out of the flow: it keeps the place it is given. */
+  absolute?: boolean;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+}
 
 export interface FrameNode extends BaseNode {
   type: "frame";
   children: NodeId[];
   clipContent: boolean;
   cornerRadii: CornerRadii;
+  /** Present on auto layout frames; children are then placed by the frame. */
+  layout?: AutoLayout;
 }
 
 export interface SectionNode extends BaseNode {

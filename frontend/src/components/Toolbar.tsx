@@ -16,6 +16,7 @@ import {
   deleteSelection,
   distributeSelection,
   duplicateSelection,
+  addAutoLayoutSelection,
   groupSelection,
   paste,
   reorderSelection,
@@ -123,6 +124,7 @@ function objectMenu(): MenuEntry[] {
   return [
     { label: "Group", shortcut: "Mod+G", action: groupSelection, disabled: none },
     { label: "Ungroup", shortcut: "Mod+Shift+G", action: ungroupSelection, disabled: none },
+    { label: "Add auto layout", shortcut: "Shift+A", action: addAutoLayoutSelection, disabled: none },
     "separator",
     { label: "Bring to front", shortcut: "]", action: () => reorderSelection("front"), disabled: none },
     { label: "Bring forward", shortcut: "Mod+]", action: () => reorderSelection("forward"), disabled: none },

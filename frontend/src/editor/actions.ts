@@ -7,6 +7,7 @@ import { selectionBounds } from "../document/geometry";
 import { childrenOf, isEffectivelyLocked, nextName, topLevelSelection } from "../document/tree";
 import { isContainer, type NodeId } from "../document/types";
 import {
+  addAutoLayout,
   addPage,
   alignNodes,
   copyNodes,
@@ -58,6 +59,15 @@ export function groupSelection(): void {
   const s = state();
   const result = groupNodes(currentPage(s), ids);
   if (result.groupId) s.edit(() => result.page, [result.groupId]);
+}
+
+/** Shift+A: lines the selection up in an auto layout frame. */
+export function addAutoLayoutSelection(): void {
+  const ids = editableSelection();
+  if (ids.length === 0) return;
+  const s = state();
+  const result = addAutoLayout(currentPage(s), ids);
+  if (result.frameId) s.edit(() => result.page, [result.frameId]);
 }
 
 export function ungroupSelection(): void {

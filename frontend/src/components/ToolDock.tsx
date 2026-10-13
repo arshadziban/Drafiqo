@@ -1,4 +1,4 @@
-import { Check, ChevronUp, Image as ImageIcon } from "lucide-react";
+import { Check, ChevronUp, Image as ImageIcon, Scaling } from "lucide-react";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { placeImageFromPicker } from "../editor/images";
 import { useEditor, type Tool } from "../editor/store";
@@ -23,6 +23,8 @@ type ToolDef = { tool: Tool; label: string; key: string; icon: ComponentType<Ico
 type ActionDef = { label: string; key: string; icon: ComponentType<IconProps>; action: () => void };
 type ToolGroup = { name: string; tools: [ToolDef, ...ToolDef[]]; actions?: ActionDef[] };
 
+const IconScale = (props: IconProps) => <Scaling strokeWidth={1.5} {...props} />;
+
 /** Dock order. A group with several tools shows one of them and offers the rest in a flyout. */
 const GROUPS: ToolGroup[] = [
   {
@@ -30,6 +32,7 @@ const GROUPS: ToolGroup[] = [
     tools: [
       { tool: "select", label: "Select", key: "V", icon: IconSelect },
       { tool: "hand", label: "Hand", key: "H", icon: IconHand },
+      { tool: "scale", label: "Scale", key: "K", icon: IconScale },
     ],
   },
   {

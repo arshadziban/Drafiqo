@@ -1,6 +1,7 @@
 import { cancelGesture, finishPen, startTextEdit } from "../canvas/interactions";
 import { useCanvasUi } from "../canvas/uiStore";
 import {
+  addAutoLayoutSelection,
   copySelection,
   cutSelection,
   deleteSelection,
@@ -27,6 +28,7 @@ import { newProject, openProject, saveProject, saveProjectAs } from "../storage/
 const TOOL_KEYS: Record<string, Tool> = {
   v: "select",
   h: "hand",
+  k: "scale",
   f: "frame",
   r: "rectangle",
   o: "ellipse",
@@ -186,6 +188,10 @@ function handle(e: KeyboardEvent): boolean {
       break;
   }
 
+  if (e.shiftKey && key === "a") {
+    addAutoLayoutSelection();
+    return true;
+  }
   if (e.shiftKey && key === "s") {
     s.setTool("section");
     return true;

@@ -6,7 +6,7 @@ import type { DrafiqoDocument, NodeId, Page, PageId } from "../document/types";
 import { emptyHistory, record, redo, undo, type History } from "../history/history";
 import { updatePage } from "./commands";
 
-export type Tool = "select" | "hand" | "frame" | "section" | "rectangle" | "ellipse" | "line" | "polygon" | "star" | "text" | "pen";
+export type Tool = "select" | "hand" | "scale" |"frame" | "section" | "rectangle" | "ellipse" | "line" | "polygon" | "star" | "text" | "pen";
 
 export interface Viewport {
   /** Screen-space offset of the page origin, in CSS pixels. */

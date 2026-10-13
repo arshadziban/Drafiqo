@@ -119,7 +119,8 @@ export function Overlay() {
   const viewport = useEditor(currentViewport);
   const tool = useEditor((s) => s.tool);
   const editingTextId = useEditor((s) => s.editingTextId);
-  const { marquee, guides, penPoints, penCursor } = useCanvasUi();
+  const { marquee, guides, layoutDrop, penPoints, penCursor } = useCanvasUi();
+  const onScreen = (p: Point) => applyToPoint(view, p);
   const view = viewMatrix(viewport);
   const live = selection.filter((id) => page.nodes[id]);
   const single = live.length === 1 ? live[0]! : null;
@@ -142,7 +143,7 @@ export function Overlay() {
       {live.length > 1 && screenBounds && (
         <rect {...screenBounds} fill="none" stroke={ACCENT} strokeWidth={1} strokeDasharray="4 3" pointerEvents="none" />
       )}
-      {single && tool === "select" && !editingTextId && !isEffectivelyLocked(page, single) && (
+      {single && (tool === "select" || tool === "scale") && !editingTextId && !isEffectivelyLocked(page, single) && (
         <Handles page={page} id={single} view={view} />
       )}
       {screenBounds && singleNode && !editingTextId && (
@@ -177,6 +178,22 @@ export function Overlay() {
             pointerEvents="none"
           />
         ),
+      )}
+      {layoutDrop && (
+        <g pointerEvents="none" data-layout-drop>
+          {layoutDrop.ghosts.map((corners, i) => (
+            <polygon key={i} points={pts(corners.map(onScreen))} fill={`${ACCENT}26`} stroke={ACCENT} strokeWidth={1} strokeDasharray="3 3" />
+          ))}
+          <line
+            x1={onScreen(layoutDrop.line[0]).x}
+            y1={onScreen(layoutDrop.line[0]).y}
+            x2={onScreen(layoutDrop.line[1]).x}
+            y2={onScreen(layoutDrop.line[1]).y}
+            stroke={ACCENT}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        </g>
       )}
       {marquee && (
         <rect

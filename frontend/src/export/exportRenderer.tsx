@@ -119,6 +119,8 @@ export interface SvgOptions {
   fit?: FitMode;
   /** #rrggbb painted behind the artwork across the whole output, or null for transparent. */
   background?: string | null;
+  /** @font-face rules for web fonts the text uses, so a picture made from the SVG has them. */
+  fontCss?: string;
 }
 
 /** A complete, self-contained SVG document for an export target. */
@@ -127,6 +129,7 @@ export function renderSvg(page: Page, target: ExportTarget, options: SvgOptions 
   const size = options.size ?? { width: bounds.width, height: bounds.height };
   const markup = renderToStaticMarkup(
     <svg xmlns="http://www.w3.org/2000/svg" width={size.width} height={size.height} viewBox={`0 0 ${size.width} ${size.height}`}>
+      {options.fontCss && <style dangerouslySetInnerHTML={{ __html: options.fontCss }} />}
       {options.background && <rect width={size.width} height={size.height} fill={options.background} />}
       <svg
         width={size.width}

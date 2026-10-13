@@ -1,3 +1,4 @@
+import { readyFontCss } from "../fonts/fontLibrary";
 import { Download, FolderOpen, Info, Link2, Link2Off, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useCanvasUi } from "../canvas/uiStore";
@@ -215,7 +216,7 @@ function Dialog({ onClose }: { onClose: () => void }) {
     const longest = Math.max(outputSize.width, outputSize.height);
     const shrink = Math.min(1, 560 / longest);
     const previewSize = { width: Math.max(1, Math.round(outputSize.width * shrink)), height: Math.max(1, Math.round(outputSize.height * shrink)) };
-    const svg = renderSvg(page, target, { size: previewSize, fit: mismatch ? fit : "stretch", background: previewBackground });
+    const svg = renderSvg(page, target, { size: previewSize, fit: mismatch ? fit : "stretch", background: previewBackground, fontCss: readyFontCss(page) });
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }, [page, target, sizeValid, source.width, outputSize.width, outputSize.height, mismatch, fit, previewBackground]);
 

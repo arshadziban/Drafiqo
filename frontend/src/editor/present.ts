@@ -1,3 +1,4 @@
+import { onFontsEmbedded, readyFontCss } from "../fonts/fontLibrary";
 import { useCanvasUi } from "../canvas/uiStore";
 import { createId } from "../document/factory";
 import { worldBounds, type Rect } from "../document/geometry";
@@ -75,7 +76,7 @@ export function slideOfSelection(page: Page, slides: readonly Slide[], selection
 
 /** Draws a slide with the exporter's renderer, so what is presented is exactly what is exported. */
 export function slideView(page: Page, slide: Slide): SlideView {
-  const svg = renderSvg(page, { key: slide.key, label: slide.name, kind: slide.kind, nodeIds: slide.nodeIds });
+  const svg = renderSvg(page, { key: slide.key, label: slide.name, kind: slide.kind, nodeIds: slide.nodeIds }, { fontCss: readyFontCss(page) });
   return { key: slide.key, name: slide.name, url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` };
 }
 
@@ -110,6 +111,7 @@ function serveSlides(token: string, first: PresentPayload): () => void {
     window.clearTimeout(timer);
     window.clearInterval(watchdog);
     unsubscribe();
+    unsubscribeFonts();
     channel.close();
   };
   const expiry = window.setTimeout(stop, SERVE_FOR_MS);
@@ -120,15 +122,20 @@ function serveSlides(token: string, first: PresentPayload): () => void {
     seen = Date.now();
     if (event.data?.type === "ready") channel.postMessage({ type: "slides", payload: latest });
   };
-  const unsubscribe = useEditor.subscribe((state, previous) => {
-    const page = currentPage(state);
-    if (page === currentPage(previous) && state.doc.assets === previous.doc.assets) return;
+  const refresh = () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       latest = buildPayload(currentPage(useEditor.getState()), latest.index);
       channel.postMessage({ type: "slides", payload: latest, live: true });
     }, LIVE_DELAY_MS);
+  };
+  const unsubscribe = useEditor.subscribe((state, previous) => {
+    const page = currentPage(state);
+    if (page === currentPage(previous) && state.doc.assets === previous.doc.assets) return;
+    refresh();
   });
+  // A web font that has just arrived changes how the slides look.
+  const unsubscribeFonts = onFontsEmbedded(refresh);
   return stop;
 }
 

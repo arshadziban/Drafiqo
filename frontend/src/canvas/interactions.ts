@@ -17,7 +17,10 @@ import {
 } from "../document/factory";
 import {
   applyToPoint,
+  boundsOfPoints,
+  cornersOf,
   invert,
+  localMatrix,
   multiply,
   rectFromPoints,
   selectionBounds,
@@ -28,9 +31,9 @@ import {
   type Point,
   type Rect,
 } from "../document/geometry";
-import { isEffectivelyLocked, isEffectivelyVisible, nextName, paintOrder, subtreeIds, topLevelSelection } from "../document/tree";
+import { childrenOf, isEffectivelyLocked, isEffectivelyVisible, nextName, paintOrder, subtreeIds, topLevelSelection } from "../document/tree";
 import type { NodeId, Page, PathPoint, SceneNode } from "../document/types";
-import { duplicateNodes, findContainerAt, insertNodeAtWorld, placeNode, removeNodes, resizeNode } from "../editor/commands";
+import { duplicateNodes, findContainerAt, insertNodeAtWorld, layoutSlotAt, placeNode, removeNodes, resizeNode, scaleNode } from "../editor/commands";
 import { currentPage, currentViewport, useEditor, type Tool } from "../editor/store";
 import { nodesInMarquee, resolveClickTarget, resolveDrillTarget } from "./hitTest";
 import { snapRect } from "./snapping";
@@ -53,6 +56,7 @@ type Drag =
       narrowTo: NodeId | null;
     }
   | { kind: "resize"; id: NodeId; base: Page; hx: number; hy: number }
+  | { kind: "scale"; id: NodeId; base: Page; hx: number; hy: number }
   | { kind: "rotate"; id: NodeId; base: Page; centre: Point; startPointer: number; startWorld: Matrix }
   | { kind: "marquee"; start: Point; additive: NodeId[] }
   | { kind: "create"; tool: Tool; start: Point; screen: Point; base: Page; parentId: NodeId | null; node: SceneNode | null }
@@ -307,6 +311,8 @@ function updateMove(d: Extract<Drag, { kind: "move" }>, e: ReactPointerEvent, wo
 
   const container = findContainerAt(d.base, world, d.excluded);
   let page = d.base;
+  /** The first dragged layer that an auto layout frame has given a slot. */
+  let slotted: NodeId | null = null;
   for (const id of d.ids) {
     const node = d.base.nodes[id]!;
     const parent = node.parentId ? d.base.nodes[node.parentId] : undefined;
@@ -315,10 +321,43 @@ function updateMove(d: Extract<Drag, { kind: "move" }>, e: ReactPointerEvent, wo
     if (parent?.type === "group") target = undefined;
     else if (node.type === "section" && container && d.base.nodes[container]?.type !== "section") target = null;
     if (target === node.parentId) target = undefined;
-    page = placeNode(page, id, multiply(translation(dx, dy), d.worlds.get(id)!), target);
+    // In an auto layout frame the pointer picks a slot between the other layers.
+    const parentId = target === undefined ? node.parentId : target;
+    const before = node.layoutItem?.absolute ? undefined : layoutSlotAt(d.base, parentId, world, d.excluded);
+    let index: number | undefined;
+    if (before !== undefined) {
+      slotted ??= id;
+      const siblings = childrenOf(page, parentId).filter((c) => c !== id);
+      index = before === null ? siblings.length : siblings.indexOf(before);
+    }
+    page = placeNode(page, id, multiply(translation(dx, dy), d.worlds.get(id)!), target, index);
   }
   const result = page;
   s.transient(() => result, d.ids);
+  // A slotted layer goes where the frame puts it, so alignment guides would point at nothing.
+  if (slotted) ui.setState({ layoutDrop: layoutDrop(d, result, slotted, dx, dy), guides: [] });
+  else ui.setState({ layoutDrop: null });
+}
+
+/** The insertion line in front of a slotted layer, and outlines of the dragged layers under the pointer. */
+function layoutDrop(d: Extract<Drag, { kind: "move" }>, page: Page, id: NodeId, dx: number, dy: number) {
+  const placed = page.nodes[id];
+  const parent = placed?.parentId ? page.nodes[placed.parentId] : undefined;
+  if (!placed || parent?.type !== "frame" || !parent.layout) return null;
+  const box = boundsOfPoints(cornersOf(localMatrix(placed), placed.width, placed.height));
+  // Halfway into the gap, unless the layer is the first one.
+  const back = parent.children.indexOf(id) > 0 ? Math.max(0, parent.layout.gap) / 2 : 0;
+  const ends: [Point, Point] =
+    parent.layout.mode === "horizontal"
+      ? [{ x: box.x - back, y: box.y }, { x: box.x - back, y: box.y + box.height }]
+      : [{ x: box.x, y: box.y - back }, { x: box.x + box.width, y: box.y - back }];
+  const toPage = worldMatrix(page, parent.id);
+  const line: [Point, Point] = [applyToPoint(toPage, ends[0]), applyToPoint(toPage, ends[1])];
+  const ghosts = d.ids.map((dragged) => {
+    const node = d.base.nodes[dragged]!;
+    return [...cornersOf(multiply(translation(dx, dy), d.worlds.get(dragged)!), node.width, node.height)];
+  });
+  return { line, ghosts };
 }
 
 function updateResize(d: Extract<Drag, { kind: "resize" }>, e: ReactPointerEvent, world: Point): void {
@@ -341,6 +380,27 @@ function updateResize(d: Extract<Drag, { kind: "resize" }>, e: ReactPointerEvent
   const ax = fromCentre ? 0.5 : 1 - d.hx;
   const ay = fromCentre ? 0.5 : 1 - d.hy;
   editor().transient(() => resizeNode(d.base, d.id, width, height, ax, ay));
+}
+
+/** The scale tool: a handle enlarges or shrinks the layer as a whole, strokes and type included. */
+function updateScale(d: Extract<Drag, { kind: "scale" }>, e: ReactPointerEvent, world: Point): void {
+  const node = d.base.nodes[d.id];
+  if (!node) return;
+  const local = applyToPoint(invert(worldMatrix(d.base, d.id)), world);
+  const fromCentre = e.altKey;
+  const ratio = (h: number, pointer: number, size: number) => {
+    if (h === 0.5 || size === 0) return 0;
+    if (fromCentre) return (Math.abs(pointer - size / 2) * 2) / size;
+    return (h === 1 ? pointer : size - pointer) / size;
+  };
+  // Land the longer side on a whole pixel, and never let it collapse.
+  const longest = Math.max(node.width, node.height);
+  if (longest <= 0) return;
+  const pulled = Math.max(ratio(d.hx, local.x, node.width), ratio(d.hy, local.y, node.height));
+  const factor = Math.max(1, Math.round(longest * pulled)) / longest;
+  const ax = fromCentre ? 0.5 : 1 - d.hx;
+  const ay = fromCentre ? 0.5 : 1 - d.hy;
+  editor().transient(() => scaleNode(d.base, d.id, factor, ax, ay));
 }
 
 function updateRotate(d: Extract<Drag, { kind: "rotate" }>, e: ReactPointerEvent, world: Point): void {
@@ -378,7 +438,7 @@ export function onPointerDown(e: ReactPointerEvent<SVGSVGElement>): void {
   const page = currentPage(s);
 
   if (s.tool === "pen") return penPointerDown(world, e.detail);
-  if (s.tool !== "select") {
+  if (s.tool !== "select" && s.tool !== "scale") {
     const start = roundPoint(world);
     drag = { kind: "create", tool: s.tool, start, screen, base: page, parentId: containerFor(page, s.tool, start), node: null };
     return;
@@ -391,7 +451,7 @@ export function onPointerDown(e: ReactPointerEvent<SVGSVGElement>): void {
   if (handle && single) {
     const [hx, hy] = (handle.getAttribute("data-handle") ?? "1,1").split(",").map(Number);
     s.begin();
-    drag = { kind: "resize", id: single, base: page, hx: hx ?? 1, hy: hy ?? 1 };
+    drag = { kind: s.tool === "scale" ? "scale" : "resize", id: single, base: page, hx: hx ?? 1, hy: hy ?? 1 };
     return;
   }
   if (target?.closest("[data-rotate]") && single) {
@@ -441,6 +501,9 @@ export function onPointerMove(e: ReactPointerEvent<SVGSVGElement>): void {
     case "resize":
       updateResize(drag, e, world);
       break;
+    case "scale":
+      updateScale(drag, e, world);
+      break;
     case "rotate":
       updateRotate(drag, e, world);
       break;
@@ -470,9 +533,10 @@ export function onPointerUp(e: ReactPointerEvent<SVGSVGElement>): void {
     case "move":
       if (d.moved) s.commit();
       else if (d.narrowTo) s.select([d.narrowTo]);
-      ui.setState({ guides: [] });
+      ui.setState({ guides: [], layoutDrop: null });
       break;
     case "resize":
+    case "scale":
     case "rotate":
       s.commit();
       break;
@@ -525,5 +589,5 @@ export function onContextMenu(e: ReactMouseEvent<SVGSVGElement>): void {
 export function cancelGesture(): void {
   if (drag && drag.kind !== "pan" && drag.kind !== "marquee" && drag.kind !== "pen") editor().cancel();
   drag = null;
-  ui.setState({ marquee: null, guides: [] });
+  ui.setState({ marquee: null, guides: [], layoutDrop: null });
 }

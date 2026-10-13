@@ -7,32 +7,40 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalSpaceAround,
+  ArrowDown,
+  ArrowRight,
   Blend,
+  ChevronDown,
   Eye,
   EyeOff,
   Minus,
   MoveHorizontal,
   MoveVertical,
+  Pin,
   Plus,
   RotateCw,
+  Ruler,
+  Scaling,
   Scan,
   Expand,
+  WrapText,
+  X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
-import { fontStack } from "../canvas/renderNode";
+import { useCallback, useMemo, useState } from "react";
+import { ensureFont } from "../fonts/fontLibrary";
+import { FontPicker } from "./FontPicker";
 import { convertEffect } from "../document/effects";
 import { dropShadow, innerShadow, layerBlur, solidPaint } from "../document/factory";
-import { getPage } from "../document/tree";
+import { getPage, topLevelSelection } from "../document/tree";
 import { getAsset } from "../document/assets";
-import type { CornerRadii, Effect, EffectType, ImagePaint, ImageScaleMode, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, SolidPaint, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
-import { FRAME_PRESETS, alignSelection, distributeSelection, insertFramePreset } from "../editor/actions";
-import { patchNodes, resizeNode, type NodePatch } from "../editor/commands";
+import type { AutoLayout, LayoutItem, LayoutSizing, CornerRadii, Effect, EffectType, ImagePaint, ImageScaleMode, LayerBlurEffect, NodeId, Paint, SceneNode, ShadowEffect, SolidPaint, StrokeCap, StrokeJoin, TextAlign, TextAutoResize } from "../document/types";
+import { FRAME_PRESETS, addAutoLayoutSelection, alignSelection, distributeSelection, insertFramePreset } from "../editor/actions";
+import { patchNodes, resizeNode, scaleNode, setAutoLayout, setLayoutItem, type NodePatch } from "../editor/commands";
 import { chooseImageForFill } from "../editor/images";
 import { currentPage, useEditor } from "../editor/store";
 import { openExportDialog } from "./openExportDialog";
 import { ColorField, IconButton, MenuList, NumberField, Section, Select, shared, useDismiss, type Mixed } from "./ui";
 
-const FONT_FAMILIES = ["Arial", "Helvetica", "Verdana", "Trebuchet MS", "Georgia", "Times New Roman", "Courier New", "Menlo", "Segoe UI", "system-ui"];
 const FONT_WEIGHTS = [
   { value: 300, label: "Light" },
   { value: 400, label: "Regular" },
@@ -159,6 +167,282 @@ function Geometry({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
   );
 }
 
+const ANCHORS = [0, 0.5, 1].flatMap((y) => [0, 0.5, 1].map((x) => ({ x, y })));
+const ANCHOR_NAMES = { x: ["left", "centre", "right"], y: ["Top", "Middle", "Bottom"] };
+
+/** A 3×3 picker of a spot in a box: the scale anchor, or where auto layout children sit. */
+function DotGrid({ label, value, onChange }: { label: string; value: { x: number | null; y: number | null }; onChange: (spot: { x: number; y: number }) => void }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="grid grid-cols-3 place-items-center gap-y-1 rounded-md bg-ink-800 px-2 py-2">
+      {ANCHORS.map(({ x, y }) => {
+        // An axis without a choice of its own (null) lights up the whole row or column.
+        const active = (value.x === null || value.x === x) && (value.y === null || value.y === y);
+        const name = `${ANCHOR_NAMES.y[y * 2]} ${ANCHOR_NAMES.x[x * 2]}`.toLowerCase();
+        return (
+          <button
+            key={name}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`${label} ${name}`}
+            data-tip={`${label} ${name}`}
+            onClick={() => onChange({ x, y })}
+            className="group/anchor flex h-4 w-4 items-center justify-center"
+          >
+            <span className={`transition-colors duration-100 ${active ? "h-2.5 w-2.5 rounded-[2px] bg-accent" : "h-1 w-1 rounded-full bg-ink-400 group-hover/anchor:bg-ink-100"}`} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const ALIGN_STEPS = ["start", "center", "end"] as const;
+type Sizing = LayoutSizing | "fill";
+type Side = "Top" | "Right" | "Bottom" | "Left";
+const SIDES: Side[] = ["Top", "Right", "Bottom", "Left"];
+const LIMITS = [
+  { key: "minWidth", label: "MIN W", title: "Minimum width" },
+  { key: "maxWidth", label: "MAX W", title: "Maximum width" },
+  { key: "minHeight", label: "MIN H", title: "Minimum height" },
+  { key: "maxHeight", label: "MAX H", title: "Maximum height" },
+] as const;
+
+const tiny = (text: string) => <span className="text-[9px] font-medium">{text}</span>;
+const setItem = (ids: readonly NodeId[], patch: LayoutItem) => useEditor.getState().edit((page) => setLayoutItem(page, ids, patch));
+
+/**
+ * How the selection is sized by auto layout: hugging its own children, filling
+ * its parent or keeping a fixed size; out of the flow or in it; and the limits
+ * on a size the layout decides. Renders cells for a two-column grid.
+ */
+function Resizing({ nodes, ids, inAuto }: { nodes: SceneNode[]; ids: NodeId[]; inAuto: boolean }) {
+  const [limits, setLimits] = useState(() => nodes.some((n) => LIMITS.some(({ key }) => n.layoutItem?.[key] !== undefined)));
+  const canHug = nodes.every((n) => n.type === "frame" && n.layout);
+  const absolute = shared(nodes, (n) => n.layoutItem?.absolute === true);
+  const sizing = (axis: "Width" | "Height") => {
+    const value = shared(nodes, (n): Sizing => {
+      if (inAuto && n.layoutItem?.[`fill${axis}`]) return "fill";
+      return n.type === "frame" && n.layout ? n.layout[axis === "Width" ? "widthSizing" : "heightSizing"] : "fixed";
+    });
+    const letter = axis[0];
+    const options: { value: Sizing; label: string }[] = [
+      { value: "fixed", label: `${letter}: Fixed` },
+      ...(canHug ? [{ value: "hug" as const, label: `${letter}: Hug` }] : []),
+      ...(inAuto && absolute !== true ? [{ value: "fill" as const, label: `${letter}: Fill` }] : []),
+    ];
+    const onChange = (next: Sizing) =>
+      useEditor.getState().edit((page) => {
+        const filled = setLayoutItem(page, ids, { [`fill${axis}`]: next === "fill" });
+        return next === "fill" ? filled : setAutoLayout(filled, ids, { [axis === "Width" ? "widthSizing" : "heightSizing"]: next });
+      });
+    return <Select<Sizing> label={`${axis} sizing`} value={value} options={options} onChange={onChange} />;
+  };
+  return (
+    <>
+      {sizing("Width")}
+      {sizing("Height")}
+      <div className="col-span-2 flex items-center gap-1">
+        {inAuto && (
+          <IconButton label="Absolute position" active={absolute === true} onClick={() => setItem(ids, { absolute: absolute !== true })}>
+            <Pin size={14} />
+          </IconButton>
+        )}
+        <IconButton label="Size limits" active={limits} onClick={() => setLimits(!limits)}>
+          <Ruler size={14} />
+        </IconButton>
+      </div>
+      {limits &&
+        LIMITS.map(({ key, label, title }) => (
+          <NumberField
+            key={key}
+            label={tiny(label)}
+            title={title}
+            min={0}
+            placeholder="None"
+            value={shared(nodes, (n) => n.layoutItem?.[key])}
+            onChange={(v) => setItem(ids, { [key]: v })}
+            onClear={() => setItem(ids, { [key]: undefined })}
+          />
+        ))}
+    </>
+  );
+}
+
+/** Auto layout: any selection can be given one; frames that have it show its settings. */
+function AutoLayoutSection({ nodes, ids, inAuto }: { nodes: SceneNode[]; ids: NodeId[]; inAuto: boolean }) {
+  const layouts = nodes.map((n) => (n.type === "frame" ? n.layout : undefined));
+  const active = layouts.every((l): l is AutoLayout => l !== undefined);
+  const set = (patch: Partial<AutoLayout> | null) => useEditor.getState().edit((page) => setAutoLayout(page, ids, patch));
+  const [perSide, setPerSide] = useState(false);
+  if (!active) {
+    return (
+      <>
+        <Section
+          title="Auto layout"
+          action={
+            <IconButton label="Add auto layout" shortcut="Shift+A" onClick={addAutoLayoutSelection}>
+              <Plus size={14} strokeWidth={1.75} />
+            </IconButton>
+          }
+        />
+        {inAuto && (
+          <Section title="Resizing">
+            <div className="grid grid-cols-2 gap-2">
+              <Resizing nodes={nodes} ids={ids} inAuto />
+            </div>
+          </Section>
+        )}
+      </>
+    );
+  }
+  const value = <K extends keyof AutoLayout>(key: K) => shared(layouts, (l) => l[key]) as AutoLayout[K] | Mixed;
+  const mode = value("mode");
+  const primary = value("primaryAlign");
+  const counter = value("counterAlign");
+  const wrap = value("wrap");
+  const horizontal = mode !== "vertical";
+  const step = (align: string | Mixed) => (align === "mixed" ? -1 : align === "space-between" ? null : ALIGN_STEPS.indexOf(align as (typeof ALIGN_STEPS)[number]) / 2);
+  const along = step(primary);
+  const across = step(counter);
+  /** One number for two opposite sides, or "mixed" when they differ. */
+  const pair = (a: Side, b: Side) => shared(layouts.flatMap((l) => [l[`padding${a}`], l[`padding${b}`]]), (v) => v);
+  return (
+    <Section
+      title="Auto layout"
+      action={
+        <IconButton label="Remove auto layout" onClick={() => set(null)}>
+          <Minus size={14} strokeWidth={1.75} />
+        </IconButton>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-1">
+          <IconButton label="Horizontal layout" active={mode === "horizontal"} onClick={() => set({ mode: "horizontal" })}>
+            <ArrowRight size={14} />
+          </IconButton>
+          <IconButton label="Vertical layout" active={mode === "vertical"} onClick={() => set({ mode: "vertical" })}>
+            <ArrowDown size={14} />
+          </IconButton>
+          <IconButton label="Wrap" active={wrap === true} onClick={() => set({ wrap: wrap !== true })}>
+            <WrapText size={14} />
+          </IconButton>
+        </div>
+        <Select<"packed" | "space-between">
+          label="Spacing mode"
+          value={primary === "mixed" ? "mixed" : primary === "space-between" ? "space-between" : "packed"}
+          options={[
+            { value: "packed", label: "Packed" },
+            { value: "space-between", label: "Space between" },
+          ]}
+          onChange={(spacing) => set({ primaryAlign: spacing === "packed" ? "start" : "space-between" })}
+        />
+        <div className="flex flex-col gap-2">
+          <NumberField label={horizontal ? <MoveHorizontal size={11} /> : <MoveVertical size={11} />} title="Gap" value={value("gap")} onChange={(gap) => set({ gap })} />
+          <NumberField label={tiny("PX")} title="Horizontal padding" min={0} value={pair("Left", "Right")} onChange={(v) => set({ paddingLeft: v, paddingRight: v })} />
+          <div className="flex items-center gap-1">
+            <div className="min-w-0 flex-1">
+              <NumberField label={tiny("PY")} title="Vertical padding" min={0} value={pair("Top", "Bottom")} onChange={(v) => set({ paddingTop: v, paddingBottom: v })} />
+            </div>
+            <IconButton label="Independent padding" active={perSide} onClick={() => setPerSide(!perSide)}>
+              <Expand size={14} />
+            </IconButton>
+          </div>
+        </div>
+        <div className="self-start">
+          <DotGrid
+            label="Align"
+            value={horizontal ? { x: along, y: across } : { x: across, y: along }}
+            onChange={({ x, y }) => {
+              const pick = (v: number) => ALIGN_STEPS[v * 2]!;
+              // Children spaced between keep that; the grid then only moves them across.
+              set({ counterAlign: pick(horizontal ? y : x), ...(primary === "space-between" ? {} : { primaryAlign: pick(horizontal ? x : y) }) });
+            }}
+          />
+        </div>
+        {perSide &&
+          SIDES.map((side) => (
+            <NumberField key={side} label={tiny(`P${side[0]}`)} title={`${side} padding`} min={0} value={value(`padding${side}`)} onChange={(v) => set({ [`padding${side}`]: v })} />
+          ))}
+        <Resizing nodes={nodes} ids={ids} inAuto={inAuto} />
+      </div>
+    </Section>
+  );
+}
+
+const SCALE_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+
+/** The side a layer's scale is measured along: its width, or its height when it has none. */
+const scaleSide = (node: SceneNode) => (node.width > 0 ? node.width : node.height);
+
+/** Replaces the top of the panel while the scale tool is active: enlarges or shrinks whole layers, strokes, effects and type included. */
+function ScalePanel({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
+  const [anchor, setAnchor] = useState({ x: 0, y: 0 });
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useDismiss(open, close);
+  // The factor reads 1x for the sizes the layers had when they were picked up with the tool.
+  const key = ids.join(",");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const base = useMemo(() => new Map(nodes.map((n) => [n.id, scaleSide(n)])), [key]);
+  const factorOf = (n: SceneNode) => {
+    const start = base.get(n.id);
+    return start ? Math.round((scaleSide(n) / start) * 100) / 100 : 1;
+  };
+  /** Scales each layer by its own factor, so setting a size or a factor twice changes nothing more. */
+  const scaleBy = (factor: (node: SceneNode) => number) =>
+    useEditor.getState().edit((page) =>
+      topLevelSelection(page, ids).reduce((p, id) => {
+        const n = p.nodes[id];
+        return n ? scaleNode(p, id, factor(n), anchor.x, anchor.y) : p;
+      }, page),
+    );
+  const setFactor = (target: number) => scaleBy((n) => (target * (base.get(n.id) ?? scaleSide(n))) / scaleSide(n));
+  const onlyLines = nodes.every((n) => n.type === "line");
+
+  return (
+    <Section
+      title="Scale"
+      action={
+        <IconButton label="Close scale" onClick={() => useEditor.getState().setTool("select")}>
+          <X size={14} />
+        </IconButton>
+      }
+    >
+      {nodes.length === 0 ? (
+        <p className="text-ink-400">Select a layer, then drag a handle to scale it.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <NumberField label="W" title="Scale width" min={0.01} value={shared(nodes, (n) => n.width)} onChange={(w) => scaleBy((n) => (n.width > 0 ? w / n.width : 1))} />
+          {onlyLines ? <span /> : <NumberField label="H" title="Scale height" min={0.01} value={shared(nodes, (n) => n.height)} onChange={(h) => scaleBy((n) => (n.height > 0 ? h / n.height : 1))} />}
+          <div ref={ref} className="relative flex items-start gap-1">
+            <div className="min-w-0 flex-1">
+              <NumberField label={<Scaling size={11} />} title="Scale factor" suffix="x" min={0.01} max={100} step={0.1} value={shared(nodes, factorOf)} onChange={setFactor} />
+            </div>
+            <button
+              type="button"
+              aria-label="Scale presets"
+              data-tip="Scale presets"
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md bg-ink-800 text-ink-300 transition-colors duration-100 hover:bg-ink-700 hover:text-ink-100"
+            >
+              <ChevronDown size={12} strokeWidth={2} />
+            </button>
+            {open && (
+              <div className="absolute top-full left-0 z-30 mt-1">
+                <MenuList onClose={close} items={SCALE_PRESETS.map((preset) => ({ label: `${preset}x`, action: () => setFactor(preset) }))} />
+              </div>
+            )}
+          </div>
+          <DotGrid label="Scale from" value={anchor} onChange={setAnchor} />
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function mapValue<A, B>(value: A | Mixed, fn: (v: A) => B): B | Mixed {
   return value === "mixed" ? "mixed" : fn(value as A);
 }
@@ -207,6 +491,12 @@ function TypeSpecific({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
 
 function TextSection({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
   const text = sharedProp<string>(nodes, "text");
+  /** A face is fetched before it is applied, so the text is measured with the real letters. */
+  const setFace = async (patch: { fontFamily?: string; fontWeight?: number }) => {
+    const faces = nodes.flatMap((n) => (n.type === "text" ? [[patch.fontFamily ?? n.fontFamily, patch.fontWeight ?? n.fontWeight] as const] : []));
+    await Promise.all(faces.map(([family, weight]) => ensureFont(family, [weight])));
+    edit(ids, patch);
+  };
   return (
     <Section title="Text">
       {nodes.length === 1 && text !== "mixed" && (
@@ -220,14 +510,9 @@ function TextSection({ nodes, ids }: { nodes: SceneNode[]; ids: NodeId[] }) {
           onBlur={() => useEditor.getState().commit()}
         />
       )}
-      <Select
-        label="Font family"
-        value={sharedProp<string>(nodes, "fontFamily")}
-        options={FONT_FAMILIES.map((f) => ({ value: f, label: f, fontFamily: fontStack(f) }))}
-        onChange={(fontFamily) => edit(ids, { fontFamily })}
-      />
+      <FontPicker value={sharedProp<string>(nodes, "fontFamily")} onChange={(fontFamily) => void setFace({ fontFamily })} />
       <div className="grid grid-cols-2 gap-2">
-        <Select label="Font weight" value={sharedProp<number>(nodes, "fontWeight")} options={FONT_WEIGHTS} onChange={(fontWeight) => edit(ids, { fontWeight })} />
+        <Select label="Font weight" value={sharedProp<number>(nodes, "fontWeight")} options={FONT_WEIGHTS} onChange={(fontWeight) => void setFace({ fontWeight })} />
         <NumberField label="Size" title="Font size" min={1} max={2000} value={sharedProp<number>(nodes, "fontSize")} onChange={(fontSize) => edit(ids, { fontSize })} />
         <NumberField
           label={<MoveVertical size={11} />}
@@ -487,11 +772,20 @@ export function PropertiesPanel() {
   const nodes = selection.map((id) => page.nodes[id]).filter((n): n is SceneNode => n !== undefined);
   const ids = nodes.map((n) => n.id);
   const type = shared(nodes, (n) => n.type);
+  const tool = useEditor((s) => s.tool);
+  // Every selected layer is placed by an auto layout frame.
+  const inAuto =
+    nodes.length > 0 &&
+    nodes.every((n) => {
+      const parent = n.parentId ? page.nodes[n.parentId] : undefined;
+      return parent?.type === "frame" && parent.layout !== undefined;
+    });
   const showFill = nodes.length > 0 && nodes.every((n) => n.type !== "group" && n.type !== "line");
   const showStroke = nodes.length > 0 && nodes.every((n) => n.type !== "group" && n.type !== "text");
 
   return (
     <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-l border-black/40 bg-ink-900" data-testid="properties">
+      {tool === "scale" && <ScalePanel nodes={nodes} ids={ids} />}
       {nodes.length === 0 ? (
         <PagePanel />
       ) : (
@@ -504,6 +798,7 @@ export function PropertiesPanel() {
           </div>
           <AlignRow count={nodes.length} />
           <Geometry nodes={nodes} ids={ids} />
+          <AutoLayoutSection key={ids.join(",")} nodes={nodes} ids={ids} inAuto={inAuto} />
           <TypeSpecific nodes={nodes} ids={ids} />
           {showFill && (
             <PaintList

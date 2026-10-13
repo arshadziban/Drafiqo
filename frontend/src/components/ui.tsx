@@ -133,22 +133,32 @@ export function NumberField({
   max,
   step = 1,
   suffix = "",
+  placeholder,
+  onClear,
 }: {
   label: ReactNode;
   title: string;
-  value: number | Mixed;
+  /** Undefined shows an empty field, for a value that may be left unset. */
+  value: number | Mixed | undefined;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
   suffix?: string;
+  placeholder?: string;
+  /** Called when the field is emptied; without it an empty entry is ignored. */
+  onClear?: () => void;
 }) {
-  const format = (v: number | Mixed) => (v === "mixed" ? "Mixed" : `${Math.round(v * 100) / 100}${suffix}`);
+  const format = (v: number | Mixed | undefined) => (v === undefined ? "" : v === "mixed" ? "Mixed" : `${Math.round(v * 100) / 100}${suffix}`);
   const [draft, setDraft] = useState<string | null>(null);
   const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
 
   const commit = (text: string) => {
     setDraft(null);
+    if (text.trim() === "" && onClear) {
+      if (value !== undefined) onClear();
+      return;
+    }
     const parsed = Number.parseFloat(text.replace(",", "."));
     if (Number.isFinite(parsed) && clamp(parsed) !== value) onChange(clamp(parsed));
   };
@@ -159,6 +169,7 @@ export function NumberField({
       <input
         aria-label={title}
         className="w-full min-w-0 bg-transparent text-ink-100 outline-none"
+        placeholder={placeholder}
         value={draft ?? format(value)}
         onFocus={(e) => e.target.select()}
         onChange={(e) => setDraft(e.target.value)}
@@ -172,10 +183,10 @@ export function NumberField({
             e.currentTarget.blur();
           } else if ((e.key === "ArrowUp" || e.key === "ArrowDown") && value !== "mixed") {
             e.preventDefault();
-            const base = draft !== null ? Number.parseFloat(draft) : value;
+            const base = draft !== null ? Number.parseFloat(draft) : (value ?? 0);
             const delta = (e.key === "ArrowUp" ? 1 : -1) * step * (e.shiftKey ? 10 : 1);
             setDraft(null);
-            onChange(clamp(Math.round(((Number.isFinite(base) ? base : value) + delta) * 1000) / 1000));
+            onChange(clamp(Math.round(((Number.isFinite(base) ? base : (value ?? 0)) + delta) * 1000) / 1000));
           }
         }}
       />

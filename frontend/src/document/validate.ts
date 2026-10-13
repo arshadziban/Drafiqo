@@ -78,7 +78,25 @@ const nonNegative = (v: unknown) => isNum(v) && v >= 0;
 const isRadii = (v: unknown) => Array.isArray(v) && v.length === 4 && v.every(nonNegative);
 const isCap = oneOf(["butt", "round", "square"]);
 
+function checkLayout(r: Reporter, layout: unknown, path: string) {
+  if (!isObj(layout)) return r.add(path, "expected an object");
+  r.check(layout, path, "mode", oneOf(["horizontal", "vertical"]), "horizontal or vertical");
+  r.check(layout, path, "gap", isNum, "a number");
+  for (const key of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"]) r.check(layout, path, key, nonNegative, "a non-negative number");
+  r.check(layout, path, "wrap", isBool, "a boolean");
+  r.check(layout, path, "primaryAlign", oneOf(["start", "center", "end", "space-between"]), "start, center, end or space-between");
+  r.check(layout, path, "counterAlign", oneOf(["start", "center", "end"]), "start, center or end");
+  for (const key of ["widthSizing", "heightSizing"]) r.check(layout, path, key, oneOf(["hug", "fixed"]), "hug or fixed");
+}
+
+function checkLayoutItem(r: Reporter, item: unknown, path: string) {
+  if (!isObj(item)) return r.add(path, "expected an object");
+  for (const key of ["fillWidth", "fillHeight", "absolute"]) r.check(item, path, key, (v) => v === undefined || isBool(v), "a boolean");
+  for (const key of ["minWidth", "maxWidth", "minHeight", "maxHeight"]) r.check(item, path, key, (v) => v === undefined || nonNegative(v), "a non-negative number");
+}
+
 function checkNode(r: Reporter, node: Obj, path: string) {
+  if (node.layoutItem !== undefined) checkLayoutItem(r, node.layoutItem, `${path}.layoutItem`);
   r.check(node, path, "name", isStr, "a string");
   r.check(node, path, "parentId", (v) => v === null || isStr(v), "a string or null");
   for (const key of ["x", "y", "rotation"]) r.check(node, path, key, isNum, "a number");
@@ -94,6 +112,7 @@ function checkNode(r: Reporter, node: Obj, path: string) {
     case "frame":
       r.check(node, path, "clipContent", isBool, "a boolean");
       r.check(node, path, "cornerRadii", isRadii, "four non-negative numbers");
+      if (node.layout !== undefined) checkLayout(r, node.layout, `${path}.layout`);
       break;
     case "rectangle":
       r.check(node, path, "cornerRadii", isRadii, "four non-negative numbers");
