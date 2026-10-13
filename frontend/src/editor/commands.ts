@@ -120,18 +120,23 @@ const flows = (node: SceneNode) => node.visible && !node.layoutItem?.absolute;
  * and finally places the children. Returns the input page when everything is
  * already in place.
  */
-function applyAutoLayout(page: Page): Page {
+function applyAutoLayout(page: Page, dirty: ReadonlySet<NodeId> | null): Page {
   let nodes: Nodes | null = null;
   const current = () => nodes ?? page.nodes;
   const mutable = () => (nodes ??= { ...page.nodes });
   const eps = 1e-6;
 
-  /** `stretchX`/`stretchY`: the parent decides this node's size along that axis, so it cannot hug there. */
-  const visit = (id: NodeId, stretchX: boolean, stretchY: boolean) => {
+  /**
+   * `stretchX`/`stretchY`: the parent decides this node's size along that axis, so it cannot hug there.
+   * A container nothing has changed in is already laid out and is skipped, unless its parent was
+   * looked at (`force`): the parent may have just resized it, or changed how it is sized.
+   */
+  const visit = (id: NodeId, stretchX: boolean, stretchY: boolean, force: boolean) => {
+    if (dirty && !force && !dirty.has(id)) return;
     const before = current()[id];
     if (!before || !isContainer(before)) return;
     if (before.type !== "frame" || !before.layout) {
-      before.children.forEach((childId) => visit(childId, false, false));
+      before.children.forEach((childId) => visit(childId, false, false, true));
       return;
     }
     const layout = before.layout;
@@ -140,7 +145,7 @@ function applyAutoLayout(page: Page): Page {
       !layout.wrap && child.rotation === 0 && flows(child) && (axis === "x" ? child.layoutItem?.fillWidth : child.layoutItem?.fillHeight) === true;
     const settle = (childId: NodeId) => {
       const child = current()[childId];
-      if (child) visit(childId, fills(child, "x"), fills(child, "y"));
+      if (child) visit(childId, fills(child, "x"), fills(child, "y"), true);
     };
     const frameNow = () => current()[id] as FrameNode;
     const itemsNow = () =>
@@ -247,22 +252,52 @@ function applyAutoLayout(page: Page): Page {
     });
   };
 
-  page.children.forEach((id) => visit(id, false, false));
+  page.children.forEach((id) => visit(id, false, false, false));
   return nodes ? { ...page, nodes } : page;
 }
+
+/**
+ * The containers that may need settling again: every layer that differs from
+ * the page as it was last settled, and everything above those. Null means all
+ * of them (there is nothing to compare with).
+ */
+function unsettled(page: Page, settled: Page | null): Set<NodeId> | null {
+  if (!settled) return null;
+  if (settled.nodes === page.nodes) return new Set();
+  const dirty = new Set<NodeId>();
+  const before = settled.nodes;
+  const nodes = page.nodes;
+  for (const id in nodes) {
+    let node = nodes[id];
+    if (node === before[id]) continue;
+    // Up the tree, until a layer that is already marked.
+    while (node && !dirty.has(node.id)) {
+      dirty.add(node.id);
+      node = node.parentId ? nodes[node.parentId] : undefined;
+    }
+  }
+  return dirty;
+}
+
+/** The page as `refitGroups` last returned it. A page is mostly the same from one edit to the next, so only what differs is looked at. */
+let lastSettled: Page | null = null;
 
 /**
  * Settles what follows from an edit: auto layout frames place their children
  * and groups hug theirs. Returns the input page when nothing needs to change.
  */
 export function refitGroups(page: Page): Page {
-  let next = fitGroupBoxes(page);
+  if (page === lastSettled) return page;
+  let dirty = unsettled(page, lastSettled);
+  let next = fitGroupBoxes(page, dirty);
   // A frame that grows can move a group's edge and the other way round, so repeat until both agree.
   for (let pass = 0; pass < 4; pass++) {
-    const laid = applyAutoLayout(next);
+    if (next !== page) dirty = unsettled(next, lastSettled);
+    const laid = applyAutoLayout(next, dirty);
     if (laid === next) break;
-    next = fitGroupBoxes(laid);
+    next = fitGroupBoxes(laid, unsettled(laid, lastSettled));
   }
+  lastSettled = next;
   return next;
 }
 
@@ -270,7 +305,7 @@ export function refitGroups(page: Page): Page {
  * Keeps every group's box tight around its children and removes groups that
  * have become empty. Returns the input page when nothing needs to change.
  */
-function fitGroupBoxes(page: Page): Page {
+function fitGroupBoxes(page: Page, dirty: ReadonlySet<NodeId> | null): Page {
   let nodes: Nodes | null = null;
   let rootChildren: NodeId[] | null = null;
   const current = () => nodes ?? page.nodes;
@@ -288,6 +323,8 @@ function fitGroupBoxes(page: Page): Page {
   };
 
   const visit = (id: NodeId) => {
+    // Nothing changed in or under it since it was last fitted.
+    if (dirty && !dirty.has(id)) return;
     const before = current()[id];
     if (!before || !isContainer(before)) return;
     before.children.forEach(visit);

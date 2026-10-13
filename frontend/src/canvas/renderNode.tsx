@@ -4,7 +4,7 @@ import { layoutText } from "../document/textLayout";
 import { activeLayerBlur, filterPad } from "../document/effects";
 import type { Effect, ImagePaint, ImageScaleMode, NodeId, SceneNode, ShadowEffect, SolidPaint, TextNode } from "../document/types";
 import { getAsset } from "../document/assets";
-import { cornerRadiiOf, outlinePath, polygonPoints, starPoints, vectorPath } from "./shapes";
+import { cornerRadiiOf, outlineData, outlinePath, polygonPoints, starPoints, vectorPath } from "./shapes";
 
 type ShapeProps = SVGProps<SVGElement>;
 
@@ -33,6 +33,7 @@ function shape(node: SceneNode, { key, ...p }: Record<string, unknown> & { key?:
     case "star":
       return <polygon key={key} points={starPoints(node)} {...p} />;
     case "vector":
+      if (node.outline) return <path key={key} d={outlineData(node.outline, node.width, node.height).fill} fillRule={node.outline.evenOdd ? "evenodd" : undefined} clipRule={node.outline.evenOdd ? "evenodd" : undefined} {...p} />;
       return <path key={key} d={vectorPath(node.points, node.closed)} strokeLinecap={node.strokeCap} strokeLinejoin={node.strokeJoin} {...p} />;
     default:
       return null;
@@ -62,6 +63,11 @@ function fillLayers(node: SceneNode): (ReactElement | null)[] {
 }
 
 function strokeLayers(node: SceneNode): (ReactElement | null)[] {
+  if (node.type === "vector" && node.outline) {
+    // An imported stroke is a shape of its own, filled with the stroke colour.
+    const d = outlineData(node.outline, node.width, node.height).stroke;
+    return d ? node.strokes.filter((s) => s.visible).map((s) => <path key={s.id} d={d} fill={s.color} fillOpacity={s.opacity} />) : [];
+  }
   if (node.strokeWidth <= 0) return [];
   return node.strokes
     .filter((s) => s.visible)
@@ -201,7 +207,7 @@ export function NodeElement({ node, renderChild, editing = false, interactive = 
       </>
     );
   } else {
-    const thin = interactive && (node.type === "line" || node.type === "vector");
+    const thin = interactive && (node.type === "line" || (node.type === "vector" && !node.outline));
     body = (
       <>
         {fillLayers(node)}

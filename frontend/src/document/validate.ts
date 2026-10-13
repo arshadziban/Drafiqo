@@ -141,6 +141,15 @@ function checkNode(r: Reporter, node: Obj, path: string) {
       r.check(node, path, "closed", isBool, "a boolean");
       r.check(node, path, "strokeCap", isCap, "a stroke cap");
       r.check(node, path, "strokeJoin", oneOf(["miter", "round", "bevel"]), "a stroke join");
+      if (node.outline !== undefined) {
+        const outline = node.outline;
+        if (!isObj(outline)) r.add(`${path}.outline`, "expected an object");
+        else {
+          for (const key of ["fill", "stroke"]) r.check(outline, `${path}.outline`, key, isStr, "a string");
+          for (const key of ["width", "height"]) r.check(outline, `${path}.outline`, key, nonNegative, "a non-negative number");
+          r.check(outline, `${path}.outline`, "evenOdd", isBool, "a boolean");
+        }
+      }
       if (!Array.isArray(node.points)) r.add(`${path}.points`, "expected an array");
       else
         node.points.forEach((pt, i) => {

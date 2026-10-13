@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "drafiqo": {
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

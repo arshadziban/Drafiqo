@@ -10,7 +10,7 @@ import {
   Trash2,
   Unlock,
 } from "lucide-react";
-import { memo, useState, type ComponentType, type DragEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type DragEvent } from "react";
 import { useCanvasUi } from "../canvas/uiStore";
 import { childrenOf, isEffectivelyLocked, paintOrder } from "../document/tree";
 import { isContainer, type NodeId, type NodeType, type Page } from "../document/types";
@@ -329,11 +329,34 @@ const LayerRow = memo(function LayerRow({
   );
 });
 
+/** Height of a layer row (`h-7`), and how many rows beyond the visible ones are kept ready. */
+const ROW_HEIGHT = 28;
+const OVERSCAN = 12;
+
 function LayersPanel() {
   const page = useEditor(currentPage);
   const collapsed = useEditor((s) => s.collapsed);
   const [zone, setZone] = useState<DropZone | null>(null);
-  const rows = visibleRows(page, collapsed);
+  const rows = useMemo(() => visibleRows(page, collapsed), [page, collapsed]);
+
+  // Only the rows in view are drawn: a page can hold tens of thousands of layers.
+  const list = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ top: 0, height: 800 });
+  const measure = useCallback(() => {
+    const el = list.current;
+    if (el) setView((v) => (v.top === el.scrollTop && v.height === el.clientHeight ? v : { top: el.scrollTop, height: el.clientHeight }));
+  }, []);
+  const hasRows = rows.length > 0;
+  useEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure, hasRows]);
+  const first = Math.max(0, Math.floor(view.top / ROW_HEIGHT) - OVERSCAN);
+  const last = Math.min(rows.length, Math.ceil((view.top + view.height) / ROW_HEIGHT) + OVERSCAN);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -343,11 +366,14 @@ function LayersPanel() {
       {rows.length === 0 ? (
         <p className="px-3 leading-relaxed text-ink-400">Nothing on this page yet. Pick a tool and draw on the canvas.</p>
       ) : (
-        <ul className="flex-1 overflow-y-auto pb-3" data-testid="layers" onDragLeave={(e) => e.currentTarget === e.target && setZone(null)}>
-          {rows.map(({ id, depth }) => (
+        <div ref={list} className="min-h-0 flex-1 overflow-y-auto" data-testid="layers" onScroll={measure}>
+          {/* Padding stands in for the rows above and below the ones drawn. */}
+          <ul style={{ paddingTop: first * ROW_HEIGHT, paddingBottom: (rows.length - last) * ROW_HEIGHT + 12 }} onDragLeave={(e) => e.currentTarget === e.target && setZone(null)}>
+          {rows.slice(first, last).map(({ id, depth }) => (
             <LayerRow key={id} id={id} depth={depth} zone={zone?.id === id ? zone.where : null} setZone={setZone} />
           ))}
-        </ul>
+          </ul>
+        </div>
       )}
     </div>
   );

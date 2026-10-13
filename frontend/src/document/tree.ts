@@ -50,6 +50,8 @@ export function paintOrder(page: Page): NodeId[] {
 
 /** Drops ids whose ancestor is also in the list, and sorts by paint order. */
 export function topLevelSelection(page: Page, ids: readonly NodeId[]): NodeId[] {
+  // The usual case, and it needs no walk over the whole page to put in order.
+  if (ids.length <= 1) return ids.filter((id) => page.nodes[id]);
   const set = new Set(ids);
   const order = new Map(paintOrder(page).map((id, index) => [id, index]));
   return ids

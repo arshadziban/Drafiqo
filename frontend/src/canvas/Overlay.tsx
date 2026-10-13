@@ -58,7 +58,7 @@ function Handles({ page, id, view }: { page: Page; id: NodeId; view: Matrix }) {
   return (
     <g>
       <line x1={top.x} y1={top.y} x2={knob.x} y2={knob.y} stroke={ACCENT} strokeWidth={1} pointerEvents="none" />
-      <circle data-rotate cx={knob.x} cy={knob.y} r={5} fill="#fff" stroke={ACCENT} strokeWidth={1.5} style={{ cursor: "grab" }} />
+      <circle data-rotate cx={knob.x} cy={knob.y} r={5} fill="#fff" stroke={ACCENT} strokeWidth={1.5} pointerEvents="auto" style={{ cursor: "grab" }} />
       {handles.map(([hx, hy]) => {
         const p = applyToPoint(m, { x: hx * node.width, y: (isLine ? 0 : hy) * node.height });
         return (
@@ -74,6 +74,7 @@ function Handles({ page, id, view }: { page: Page; id: NodeId; view: Matrix }) {
             stroke={ACCENT}
             strokeWidth={1.5}
             transform={`rotate(${angle} ${p.x} ${p.y})`}
+            pointerEvents="auto"
             style={{ cursor: handleCursor(hx, hy) }}
           />
         );
@@ -100,6 +101,7 @@ function FrameLabels({ page, view, selection }: { page: Page; view: Matrix; sele
             y={-7}
             fontSize={11}
             fill={selection.includes(id) ? ACCENT : "#a3aaba"}
+            pointerEvents="auto"
             // The editor input replaces the text while the name is being edited.
             visibility={editing === id ? "hidden" : undefined}
             style={{ cursor: "var(--cursor-app)" }}
@@ -112,7 +114,11 @@ function FrameLabels({ page, view, selection }: { page: Page; view: Matrix; sele
   );
 }
 
-/** Screen-space chrome drawn above the artwork: labels, selection, guides, drafts. */
+/**
+ * Screen-space chrome drawn above the artwork: labels, selection, guides, drafts.
+ * It lives in a layer of its own that lets the pointer through, so only what
+ * can be grabbed (handles, frame names) asks for pointer events.
+ */
 export function Overlay() {
   const page = useEditor(currentPage);
   const selection = useEditor((s) => s.selection);

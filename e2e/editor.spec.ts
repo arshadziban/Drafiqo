@@ -62,13 +62,21 @@ test("scales a layer with the scale tool, stroke included", async ({ page }) => 
 });
 
 test("picks a Google font from the searchable font list and embeds it in exports", async ({ page }) => {
+  /** The characters each cut-down font was asked for. */
+  const subsets: string[] = [];
   // Google is stood in for: the "font" is a wide local face, so loading it visibly changes the text.
   await page.route("https://fonts.googleapis.com/**", (route) => {
-    const subset = new URL(route.request().url()).searchParams.has("text");
+    const text = new URL(route.request().url()).searchParams.get("text");
+    const subset = text !== null;
+    if (text !== null) subsets.push(text);
     const src = subset ? "url(https://fonts.gstatic.com/s/lobster/subset.woff2) format('woff2')" : "local('Courier New')";
     return route.fulfill({ contentType: "text/css", headers: { "access-control-allow-origin": "*" }, body: `@font-face { font-family: 'Lobster'; font-weight: 400; src: ${src}; }` });
   });
-  await page.route("https://fonts.gstatic.com/**", (route) => route.fulfill({ contentType: "font/woff2", headers: { "access-control-allow-origin": "*" }, body: "font-bytes" }));
+  let fontFiles = 0;
+  await page.route("https://fonts.gstatic.com/**", (route) => {
+    fontFiles++;
+    return route.fulfill({ contentType: "font/woff2", headers: { "access-control-allow-origin": "*" }, body: "font-bytes" });
+  });
 
   await page.keyboard.press("t");
   await page.mouse.click(450, 300);
@@ -88,14 +96,9 @@ test("picks a Google font from the searchable font list and embeds it in exports
   // The text box was fitted with the new face, not the one it replaced.
   await expect.poll(async () => Number(await field(page, "Width").inputValue())).toBeGreaterThan(width);
 
-  // Pictures made from the page carry the font, cut down to the letters used.
-  const css = await page.evaluate(async () => {
-    const fonts = await import("/src/fonts/fontLibrary.ts" as string);
-    const { useEditor, currentPage } = await import("/src/editor/store.ts" as string);
-    return fonts.embeddedFontCss(currentPage(useEditor.getState())) as Promise<string>;
-  });
-  expect(css).toContain("font-family: 'Lobster'");
-  expect(css).toContain("url(data:font/woff2;base64,");
+  // Pictures made from the page carry the font: it is fetched again cut down to the letters used, files and all.
+  await expect.poll(() => subsets.at(-1) ?? "").toBe("Hehlort");
+  await expect.poll(() => fontFiles).toBeGreaterThan(0);
 });
 
 test("lines layers up with auto layout and re-flows them", async ({ page }) => {

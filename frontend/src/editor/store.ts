@@ -207,8 +207,18 @@ export const useEditor = create<EditorState>()((set, get) => ({
 setAssets(useEditor.getState().doc.assets);
 useEditor.subscribe((s) => setAssets(s.doc.assets));
 
+let lastPages: readonly Page[] | null = null;
+let lastPageId: PageId | null = null;
+let lastPage: Page | null = null;
+
+/** Asked for by every layer on every change, so the answer for the same document is remembered. */
 export function currentPage(s: EditorState): Page {
-  return getPage(s.doc, s.pageId) ?? s.doc.pages[0]!;
+  if (s.doc.pages !== lastPages || s.pageId !== lastPageId) {
+    lastPages = s.doc.pages;
+    lastPageId = s.pageId;
+    lastPage = getPage(s.doc, s.pageId) ?? s.doc.pages[0]!;
+  }
+  return lastPage!;
 }
 
 export function currentViewport(s: EditorState): Viewport {

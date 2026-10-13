@@ -421,7 +421,7 @@ function updateRotate(d: Extract<Drag, { kind: "rotate" }>, e: ReactPointerEvent
 // Event handlers
 // ---------------------------------------------------------------------------
 
-export function onPointerDown(e: ReactPointerEvent<SVGSVGElement>): void {
+export function onPointerDown(e: ReactPointerEvent<Element>): void {
   const s = editor();
   if (s.editingTextId) finishTextEdit();
   ui.setState({ contextMenu: null });
@@ -482,7 +482,7 @@ export function onPointerDown(e: ReactPointerEvent<SVGSVGElement>): void {
   beginMove(e, world, screen, already && !e.shiftKey && s.selection.length > 1 ? picked : null);
 }
 
-export function onPointerMove(e: ReactPointerEvent<SVGSVGElement>): void {
+export function onPointerMove(e: ReactPointerEvent<Element>): void {
   const s = editor();
   const screen = screenPoint(e);
   const world = toWorld(screen);
@@ -523,7 +523,7 @@ export function onPointerMove(e: ReactPointerEvent<SVGSVGElement>): void {
   }
 }
 
-export function onPointerUp(e: ReactPointerEvent<SVGSVGElement>): void {
+export function onPointerUp(e: ReactPointerEvent<Element>): void {
   if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   const d = drag;
   drag = null;
@@ -551,7 +551,7 @@ export function onPointerUp(e: ReactPointerEvent<SVGSVGElement>): void {
   }
 }
 
-export function onDoubleClick(e: ReactMouseEvent<SVGSVGElement>): void {
+export function onDoubleClick(e: ReactMouseEvent<Element>): void {
   const s = editor();
   if (s.tool !== "select") return;
   const page = currentPage(s);
@@ -573,7 +573,7 @@ export function onDoubleClick(e: ReactMouseEvent<SVGSVGElement>): void {
   if (deeper) s.select([deeper]);
 }
 
-export function onContextMenu(e: ReactMouseEvent<SVGSVGElement>): void {
+export function onContextMenu(e: ReactMouseEvent<Element>): void {
   e.preventDefault();
   const s = editor();
   if (s.editingTextId) finishTextEdit();

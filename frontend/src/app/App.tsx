@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Canvas } from "../canvas/Canvas";
 import { ExportDialog } from "../components/ExportDialog";
+import { FigmaImportDialog } from "../components/FigmaImportDialog";
 import { LeftSidebar } from "../components/LeftSidebar";
 import { Presentation } from "../components/Presentation";
 import { PropertiesPanel } from "../components/PropertiesPanel";
@@ -56,6 +57,7 @@ export function App() {
         <PropertiesPanel />
       </div>
       <ExportDialog />
+      <FigmaImportDialog />
       <TooltipLayer />
       <Presentation />
       <Toast />

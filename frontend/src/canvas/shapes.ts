@@ -1,4 +1,4 @@
-import type { CornerRadii, PathPoint, PolygonNode, SceneNode, StarNode } from "../document/types";
+import type { CornerRadii, PathPoint, PolygonNode, SceneNode, StarNode, VectorOutline } from "../document/types";
 
 const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
 
@@ -97,8 +97,32 @@ export function outlinePath(node: SceneNode): string {
       return `M${points[0]} ${points.slice(1).map((p) => `L${p}`).join(" ")} Z`;
     }
     case "vector":
-      return vectorPath(node.points, node.closed);
+      return node.outline ? outlineData(node.outline, node.width, node.height).fill : vectorPath(node.points, node.closed);
     default:
       return "";
   }
+}
+
+const stretched = new WeakMap<VectorOutline, { width: number; height: number; fill: string; stroke: string }>();
+
+/** Path data made of absolute x,y pairs, stretched by the given factors. */
+function stretchPath(d: string, sx: number, sy: number): string {
+  if (sx === 1 && sy === 1) return d;
+  let isX = true;
+  return d.replace(/-?\d*\.?\d+(?:e-?\d+)?/g, (value) => {
+    const scaled = Number(value) * (isX ? sx : sy);
+    isX = !isX;
+    return String(Math.round(scaled * 1000) / 1000);
+  });
+}
+
+/** An imported outline at the node's current size. Worked out once per size, as there can be very many. */
+export function outlineData(outline: VectorOutline, width: number, height: number): { fill: string; stroke: string } {
+  const known = stretched.get(outline);
+  if (known && known.width === width && known.height === height) return known;
+  const sx = outline.width > 0 ? width / outline.width : 1;
+  const sy = outline.height > 0 ? height / outline.height : 1;
+  const next = { width, height, fill: stretchPath(outline.fill, sx, sy), stroke: stretchPath(outline.stroke, sx, sy) };
+  stretched.set(outline, next);
+  return next;
 }

@@ -56,6 +56,28 @@ PNG, JPG, WebP, GIF, SVG, AVIF and BMP are supported, up to 25 MB each; pictures
 
 **Present** (the play button in the top bar, or Ctrl+Alt+Enter) shows the page as a slideshow. Each top-level frame is a slide, in reading order (rows from top to bottom, left to right); a page without frames is one slide. It opens in a separate window (a pop-up window in a browser) that you can move, resize and close like any other, and press F for full screen; the editor stays as it was and keeps working; if no window can be opened it covers the editor instead. It starts from the selected frame, or from the first slide; the arrow next to the button also offers **Present from start**. Arrow keys, Space, Page Up/Down or clicks (Shift+click goes back) move between slides, Home and End jump to the ends, and Esc closes the window. The slideshow is live: edits made in the editor appear in the window a moment later, on the slide you are viewing.
 
+## Importing from Figma
+
+**File ▸ Import Figma file…** (or dropping a `.fig` file on the canvas) opens a Figma design saved with *File ▸ Save local copy…*. A dialog lists the file's pages and the frames on them with their layer counts; what you tick is added to the open document as new pages, in one undo step. More than 5,000 layers at once makes the canvas slow, and more than 40,000 is refused, so bring a large file in by parts.
+
+Frames, groups, components and their instances, rectangles, ellipses, lines, text, auto layout, solid fills, image fills, strokes, shadows and layer blur come across as the same thing here. Vectors, boolean shapes, stars and polygons come across as outlines that look the same, with the stroke already part of the shape. Not carried over, and said so after the import: gradients (one colour stands in), masks, mirroring, background blur, changes made on a component instance, and several text styles within one layer. Text keeps the box it had in Figma; fonts that are neither installed nor on Google Fonts are shown in a substitute.
+
+## Designing with Claude (MCP)
+
+`mcp/server.mjs` is an MCP server that lets an AI assistant design in the Drafiqo window you have open: it can read the page, add and change layers (auto layout, fonts and effects included) and look at a picture of the result. Changes appear on the canvas as they are made, and each one is a single undo step.
+
+1. Open Drafiqo (`npm run tauri dev`).
+2. Connect the assistant:
+   - **Claude Code**: start it in this folder. The `drafiqo` server is declared in `.mcp.json`; approve it when asked.
+   - **Claude Desktop**: add this to `claude_desktop_config.json`, with the path to your checkout, and restart it.
+
+     ```json
+     { "mcpServers": { "drafiqo": { "command": "node", "args": ["/path/to/Drafiqo/mcp/server.mjs"] } } }
+     ```
+3. Drafiqo shows "Claude connected" within a few seconds. Then ask, for example, "design a login screen for a phone in Drafiqo".
+
+The server listens on `127.0.0.1:4725` only (set `DRAFIQO_MCP_PORT` to change it) and accepts no one but the Drafiqo app; the editor calls in to it. One assistant session can hold the port at a time.
+
 ## Project files
 
 A `.drafiqo` file is JSON holding the full editable document: pages, the layer tree, and every object's geometry, style and text. It carries a `schemaVersion`; older versions are upgraded through `document/migrate.ts`, and files from a newer version are refused rather than misread.

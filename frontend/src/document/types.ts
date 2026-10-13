@@ -211,8 +211,24 @@ export interface PathPoint {
   outY?: number;
 }
 
+/**
+ * A ready-made outline, as imported from another tool: any number of sub-paths,
+ * with the stroke already turned into a shape of its own. Both are SVG path
+ * data drawn for a box of `width` × `height` and stretched to the node's size.
+ */
+export interface VectorOutline {
+  fill: string;
+  /** Painted with the stroke colour. Empty when there is no stroke. */
+  stroke: string;
+  width: number;
+  height: number;
+  evenOdd: boolean;
+}
+
 export interface VectorNode extends BaseNode {
   type: "vector";
+  /** Takes the place of `points` when present. */
+  outline?: VectorOutline;
   points: PathPoint[];
   closed: boolean;
   strokeCap: StrokeCap;

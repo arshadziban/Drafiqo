@@ -207,7 +207,7 @@ function handle(e: KeyboardEvent): boolean {
 
 /** Ctrl+V: a picture on the system clipboard is placed; otherwise the copied layers are pasted. */
 function onPaste(e: ClipboardEvent): void {
-  if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().presenting || isTyping(e.target)) return;
+  if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().figmaImport || useCanvasUi.getState().presenting || isTyping(e.target)) return;
   const pictures = [...(e.clipboardData?.files ?? [])].filter((file) => file.type.startsWith("image/"));
   e.preventDefault();
   if (pictures.length > 0) void placeImageFiles(pictures);
@@ -217,7 +217,7 @@ function onPaste(e: ClipboardEvent): void {
 export function installShortcuts(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     // The export dialog and the slideshow are modal: editor shortcuts wait until they close.
-    if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().presenting) return;
+    if (useCanvasUi.getState().exportOpen || useCanvasUi.getState().figmaImport || useCanvasUi.getState().presenting) return;
     // Typing in a field keeps every key, including the system's own editing shortcuts.
     if (isTyping(e.target)) {
       const fileShortcut = (e.metaKey || e.ctrlKey) && ["s", "o", "n"].includes(e.key.toLowerCase());

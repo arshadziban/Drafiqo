@@ -30,6 +30,7 @@ import {
   zoomToFit,
 } from "../editor/actions";
 import { placeImageFromPicker } from "../editor/images";
+import { importFigmaFromPicker } from "../figma/importFigma";
 import { presentationSlides, slideOfSelection, startPresenting } from "../editor/present";
 import { currentPage, currentViewport, isDirty, useEditor } from "../editor/store";
 import { IconSidebarRight } from "../icons/icons";
@@ -72,6 +73,7 @@ function fileMenu(): MenuEntry[] {
     { label: "Open…", shortcut: "Mod+O", action: () => void openProject() },
     "separator",
     { label: "Place image…", shortcut: "Mod+Shift+K", action: () => void placeImageFromPicker() },
+    { label: "Import Figma file…", action: importFigmaFromPicker },
     "separator",
     { label: "Save", shortcut: "Mod+S", action: () => void saveProject() },
     { label: "Save as…", shortcut: "Mod+Shift+S", action: () => void saveProjectAs() },

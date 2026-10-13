@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { SlideView } from "../editor/present";
+import type { FigmaImportState } from "../figma/importFigma";
 import type { Point, Rect } from "../document/geometry";
 import type { NodeId, PathPoint } from "../document/types";
 import type { SnapGuide } from "./snapping";
@@ -21,6 +22,8 @@ interface CanvasUiState {
   /** The frame or section whose name is being edited on the canvas label. */
   labelEditId: NodeId | null;
   exportOpen: boolean;
+  /** A Figma file being read or chosen from, while its import dialog is open. */
+  figmaImport: FigmaImportState | null;
   /** The slideshow, while one is running. */
   presenting: { slides: SlideView[]; index: number } | null;
   /** A short confirmation shown at the top of the window, e.g. after an export. */
@@ -37,6 +40,7 @@ export const useCanvasUi = create<CanvasUiState>()(() => ({
   renamingId: null,
   labelEditId: null,
   exportOpen: false,
+  figmaImport: null,
   presenting: null,
   toast: null,
 }));

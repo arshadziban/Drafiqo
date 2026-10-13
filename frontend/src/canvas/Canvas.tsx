@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { importFigmaFile, isFigmaFile } from "../figma/importFigma";
+import { memo, useEffect, useRef, useState } from "react";
+import type { NodeId } from "../document/types";
 import { zoomAt } from "../editor/actions";
 import { placeImageFiles } from "../editor/images";
-import { currentPage, currentViewport, useEditor } from "../editor/store";
+import { currentPage, currentViewport, useEditor, type Viewport } from "../editor/store";
 import { ContextMenu } from "./ContextMenu";
 import { finishPen, isSpaceHeld, onContextMenu, onDoubleClick, onPointerDown, onPointerMove, onPointerUp, setSpaceHeld } from "./interactions";
 import { LabelEditor } from "./LabelEditor";
@@ -26,6 +28,51 @@ function Grid({ x, y, zoom }: { x: number; y: number; zoom: number }) {
   );
 }
 
+/** The artwork is painted this far beyond the window on every side, so a pan has something to bring in. */
+const MARGIN = 256;
+/** How long after the last pan or zoom step the artwork is painted afresh. */
+const SETTLE_MS = 120;
+
+/**
+ * The view the artwork was last painted for. Repainting thousands of layers on
+ * every step of a pan or zoom is what makes a large page stutter, so while the
+ * view is moving the painted picture is slid and scaled instead (which costs
+ * nothing), and painted properly once the view comes to rest.
+ */
+function usePaintedViewport(live: Viewport, size: { width: number; height: number }): { painted: Viewport; transform: string | undefined } {
+  const [settled, setSettled] = useState(live);
+  const k = live.zoom / settled.zoom;
+  const dx = live.x - settled.x * k;
+  const dy = live.y - settled.y * k;
+  // Usable while the picture still covers the window and is not stretched into a blur.
+  const covers = (offset: number, length: number) => offset - MARGIN * k <= 0 && offset + (length + MARGIN) * k >= length;
+  const usable = k >= 0.5 && k <= 2 && covers(dx, size.width) && covers(dy, size.height);
+  useEffect(() => {
+    if (settled === live) return;
+    if (!usable) return setSettled(live);
+    const timer = window.setTimeout(() => setSettled(live), SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [live, settled, usable]);
+  if (!usable || settled === live) return { painted: usable ? settled : live, transform: undefined };
+  return { painted: settled, transform: `translate(${dx}px, ${dy}px) scale(${k})` };
+}
+
+/** The artwork itself. Redrawn only when the layers or the painted view change, not on every pan step. */
+const Scene = memo(function Scene({ ids, viewport, transform }: { ids: readonly NodeId[]; viewport: Viewport; transform: string | undefined }) {
+  return (
+    <svg
+      className="absolute"
+      style={{ left: -MARGIN, top: -MARGIN, width: `calc(100% + ${MARGIN * 2}px)`, height: `calc(100% + ${MARGIN * 2}px)`, transformOrigin: `${MARGIN}px ${MARGIN}px`, transform, willChange: "transform" }}
+    >
+      <g data-scene transform={`translate(${viewport.x + MARGIN} ${viewport.y + MARGIN}) scale(${viewport.zoom})`}>
+        {ids.map((id) => (
+          <NodeView key={id} id={id} />
+        ))}
+      </g>
+    </svg>
+  );
+});
+
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const background = useEditor((s) => currentPage(s).background);
@@ -35,6 +82,8 @@ export function Canvas() {
   const hasViewport = useEditor((s) => s.pageId in s.viewports);
   const tool = useEditor((s) => s.tool);
   const showGrid = useEditor((s) => s.showGrid);
+  const canvasSize = useEditor((s) => s.canvasSize);
+  const { painted, transform } = usePaintedViewport(viewport, canvasSize);
   const [panning, setPanning] = useState(false);
   const [dropping, setDropping] = useState(false);
 
@@ -155,12 +204,17 @@ export function Canvas() {
         if (!e.dataTransfer.types.includes("Files")) return;
         e.preventDefault();
         setDropping(false);
+        const files = [...e.dataTransfer.files];
+        // A Figma file is imported; anything else is placed as a picture.
+        const figma = files.find(isFigmaFile);
+        if (figma) return void importFigmaFile(figma);
         const box = e.currentTarget.getBoundingClientRect();
-        void placeImageFiles([...e.dataTransfer.files], { x: e.clientX - box.left, y: e.clientY - box.top });
+        void placeImageFiles(files, { x: e.clientX - box.left, y: e.clientY - box.top });
       }}
     >
-      <svg
-        className="absolute inset-0 h-full w-full touch-none"
+      {/* Three layers: the grid, the artwork, and the selection chrome. Each repaints without the others. */}
+      <div
+        className="absolute inset-0 touch-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -168,14 +222,16 @@ export function Canvas() {
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       >
-        {showGrid && <Grid x={viewport.x} y={viewport.y} zoom={viewport.zoom} />}
-        <g data-scene transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
-          {children.map((id) => (
-            <NodeView key={id} id={id} />
-          ))}
-        </g>
-        <Overlay />
-      </svg>
+        {showGrid && (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full">
+            <Grid x={viewport.x} y={viewport.y} zoom={viewport.zoom} />
+          </svg>
+        )}
+        <Scene ids={children} viewport={painted} transform={transform} />
+        <svg className="pointer-events-none absolute inset-0 h-full w-full">
+          <Overlay />
+        </svg>
+      </div>
       <TextEditor />
       <LabelEditor />
       <ContextMenu />
